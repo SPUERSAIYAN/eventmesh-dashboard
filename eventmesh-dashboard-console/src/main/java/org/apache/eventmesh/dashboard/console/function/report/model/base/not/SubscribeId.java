@@ -37,7 +37,7 @@ public class SubscribeId extends RuntimeId {
 
     @Data
     @EqualsAndHashCode(callSuper = true)
-    public static class LongValue extends SubscribeId {
+    public static class SubscribeLongValue extends SubscribeId {
 
         private Long value;
 
@@ -45,7 +45,7 @@ public class SubscribeId extends RuntimeId {
 
     @Data
     @EqualsAndHashCode(callSuper = true)
-    public static class FloatValue extends SubscribeId {
+    public static class SubscribeFloatValue extends SubscribeId {
 
         private Float value;
 

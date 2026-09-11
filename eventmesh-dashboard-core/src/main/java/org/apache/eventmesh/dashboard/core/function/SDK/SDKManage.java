@@ -140,7 +140,7 @@ public class SDKManage {
         return null;
     }
 
-    public static synchronized SDKManage getInstance() {
+    public static SDKManage getInstance() {
         return INSTANCE;
     }
 
@@ -219,6 +219,7 @@ public class SDKManage {
 
             AbstractClientInfo<Object> abstractClientInfo = (AbstractClientInfo<Object>) clazz.newInstance();
             abstractClientInfo.setClientWrapper(clientMap.get(unique));
+            abstractClientInfo.setBaseSyncBase(baseSyncBase);
             classMap.put(clazz, abstractClientInfo);
             return (T) abstractClientInfo;
         } catch (Exception e) {

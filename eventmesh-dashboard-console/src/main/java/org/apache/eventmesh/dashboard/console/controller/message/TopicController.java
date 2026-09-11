@@ -19,6 +19,7 @@
 package org.apache.eventmesh.dashboard.console.controller.message;
 
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata;
 import org.apache.eventmesh.dashboard.common.model.metadata.RuntimeMetadata;
 import org.apache.eventmesh.dashboard.console.controller.ClusterAbilityService;
@@ -34,6 +35,9 @@ import org.apache.eventmesh.dashboard.console.model.dto.topic.GetTopicListDTO;
 import org.apache.eventmesh.dashboard.console.model.vo.RuntimeIdDTO;
 import org.apache.eventmesh.dashboard.console.model.vo.topic.TopicDetailGroupVO;
 import org.apache.eventmesh.dashboard.console.service.message.TopicService;
+import org.apache.eventmesh.dashboard.console.spring.support.DBRemotingResultHook;
+import org.apache.eventmesh.dashboard.console.utils.data.adaptation.eventmesh.topic.AdaptationService;
+import org.apache.eventmesh.dashboard.console.utils.data.adaptation.eventmesh.topic.AdaptationService.AdaptationMetadataTypeWrapper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,6 +57,9 @@ import com.github.pagehelper.PageHelper;
 @RequestMapping("/user/topic")
 public class TopicController {
 
+    private final AdaptationMetadataTypeWrapper adaptationMetadataTypeWrapper = AdaptationService.getInstance().getAdaptationMetadataTypeWrapper(
+        MetadataType.TOPIC);
+
     @Autowired
     private TopicService topicService;
 
@@ -65,6 +72,11 @@ public class TopicController {
 
     @Autowired
     private ClusterAndRuntimeDomain clusterAndRuntimeDomain;
+
+
+    @Autowired
+    private DBRemotingResultHook dbRemotingResultHook;
+
 
     @PostMapping("/queryTopicListByClusterId")
     public List<TopicEntity> queryTopicListByClusterId(@Validated @RequestBody GetTopicListDTO getTopicListDTO) {
@@ -111,12 +123,16 @@ public class TopicController {
             })));
     }
 
+    /**
+     * <pre>
+     *     需要三个测试集群，eventmesh ，kafka ， rocketmq
+     * </pre>
+     */
     @PostMapping("createTopic")
     public void createTopic(@Validated @RequestBody CreateTopicDTO createTopicDTO) {
         List<TopicEntity> createTopicList = new ArrayList<>();
-        // 如果 是 eventmesh 集群。 得到 eventmesh 所有 runtime ， 所有存储
-        clusterMetadataDomain.operation(createTopicDTO.getClusterId(), new ClusterOperationHandler() {
 
+        ClusterOperationHandler handler = new ClusterOperationHandler() {
             @Override
             public void handler(RuntimeMetadata baseSyncBase) {
                 TopicEntity topicEntity = TopicControllerMapper.INSTANCE.createTopic(createTopicDTO);
@@ -125,6 +141,7 @@ public class TopicController {
                 topicEntity.setClusterType(baseSyncBase.getClusterType());
                 topicEntity.setRuntimeId(baseSyncBase.getId());
 
+                adaptationMetadataTypeWrapper.get(baseSyncBase.getClusterType(), "create").adaptation(topicEntity, createTopicDTO);
             }
 
             @Override
@@ -133,9 +150,16 @@ public class TopicController {
                 createTopicList.add(topicEntity);
                 topicEntity.setClusterId(clusterDO.getClusterId());
                 topicEntity.setClusterType(clusterDO.getClusterType());
+                topicEntity.setRuntimeId(0L);
+                adaptationMetadataTypeWrapper.get(clusterDO.getClusterType(), "create").adaptation(topicEntity, createTopicDTO);
             }
-        });
+        };
+        // 如果 是 eventmesh 集群。 得到 eventmesh 所有 runtime ， 所有存储
+        clusterMetadataDomain.operation(createTopicDTO.getClusterId(), handler);
+        // 需要验证，是否存在.... 如果存在就不处理，如果不存在就添加，有差集，补充差集
         this.topicService.batchInsert(createTopicList);
+
+        dbRemotingResultHook.monitor(createTopicList);
     }
 
     @Deprecated

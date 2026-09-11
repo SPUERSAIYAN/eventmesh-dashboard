@@ -44,15 +44,21 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.Getter;
 import lombok.Setter;
 
+
 @Setter
 public abstract class AbstractReportEngine implements ReportEngine {
 
 
     protected ReportEngineConfig reportEngineConfig;
+
     protected XMLLanguageDriver xmlLanguageDriver = new XMLLanguageDriver();
+
     private VelocityEngine velocityEngine;
+
     private Configuration configuration = new Configuration();
+
     private Map<String, Map<String, SqlSource>> stringSqlSourceMap = new HashMap<>();
+
     private Class<?> reportClass;
 
     private StringResourceRepository resourceLoader = new StringResourceRepositoryImpl();
@@ -62,33 +68,27 @@ public abstract class AbstractReportEngine implements ReportEngine {
 
     private Map<String, Map<String, String>> reportSQL = new ConcurrentHashMap<>();
 
+    /**
+     * 不应该 传递单个 map
+     */
+    @Setter
+    private Map<Class<?>, String> clazzToTableName;
+
+    protected abstract void doInit();
+
+    protected abstract AbstractReportMetaHandler doCreateReportHandler(ReportMetaData reportMetaData, List<Field> fieldList);
+
     public void init() {
         this.createVelocity();
 
         this.doInit();
     }
 
-    protected abstract void doInit();
-
-    @Deprecated
-    private void createVelocity() {
-        VelocityEngine velocityEngine = new VelocityEngine();
-        velocityEngine.setProperty(RuntimeConstants.RESOURCE_LOADER, "report");
-        velocityEngine.setProperty("resource.loader.report.class", StringResourceLoader.class.getName());
-        velocityEngine.setProperty("resource.loader.report.repository.name", "report");
-        velocityEngine.setProperty("resource.loader.report.repository.static", false);
-        velocityEngine.setApplicationAttribute("report", resourceLoader);
-        velocityEngine.init();
-        this.velocityEngine = velocityEngine;
-    }
-
-
-    protected String querySentence(SingleGeneralReportDO singleGeneralReportDO) {
-        VelocityContext velocityContext = new VelocityContext();
-        velocityContext.put("data", singleGeneralReportDO);
-        StringWriter stringWriter = new StringWriter();
-        this.velocityEngine.getTemplate("").merge(velocityContext, stringWriter);
-        return stringWriter.toString();
+    @Override
+    public void batchInsertByClass(Map<Class<?>, List<Object>> data) {
+        data.forEach((k, v) -> {
+            this.batchInsert(this.clazzToTableName.get(k), v);
+        });
     }
 
     @Override
@@ -99,7 +99,17 @@ public abstract class AbstractReportEngine implements ReportEngine {
         this.reportMetaHandlerMap.put(reportMetaData.getReportName(), abstractReportMetaHandler);
     }
 
-    protected abstract AbstractReportMetaHandler doCreateReportHandler(ReportMetaData reportMetaData, List<Field> fieldList);
+    /**
+     * 直接使用 mybatis 的  xml 解析模式， velocity 的学习成本高
+     */
+    @Deprecated
+    protected String querySentence(SingleGeneralReportDO singleGeneralReportDO) {
+        VelocityContext velocityContext = new VelocityContext();
+        velocityContext.put("data", singleGeneralReportDO);
+        StringWriter stringWriter = new StringWriter();
+        this.velocityEngine.getTemplate("").merge(velocityContext, stringWriter);
+        return stringWriter.toString();
+    }
 
     protected String buildSql(String reportName, String type, Object value) {
         SqlSource sqlSource = this.buildSqlSource(reportName, type);
@@ -128,5 +138,17 @@ public abstract class AbstractReportEngine implements ReportEngine {
             sql = handler.query(type);
         }
         return sql;
+    }
+
+    @Deprecated
+    private void createVelocity() {
+        VelocityEngine velocityEngine = new VelocityEngine();
+        velocityEngine.setProperty(RuntimeConstants.RESOURCE_LOADER, "report");
+        velocityEngine.setProperty("resource.loader.report.class", StringResourceLoader.class.getName());
+        velocityEngine.setProperty("resource.loader.report.repository.name", "report");
+        velocityEngine.setProperty("resource.loader.report.repository.static", false);
+        velocityEngine.setApplicationAttribute("report", resourceLoader);
+        velocityEngine.init();
+        this.velocityEngine = velocityEngine;
     }
 }

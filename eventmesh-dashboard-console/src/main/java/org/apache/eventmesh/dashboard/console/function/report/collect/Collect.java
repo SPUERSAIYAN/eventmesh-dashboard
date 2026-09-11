@@ -17,6 +17,8 @@
 
 package org.apache.eventmesh.dashboard.console.function.report.collect;
 
+import org.apache.eventmesh.dashboard.console.function.report.collect.DataSyncHandler.DataSyncHandlerWrapper;
+
 /**
  * TODO 设计一个 兼容 metadata list 与 全量 collect
  *      纠结，
@@ -53,7 +55,10 @@ package org.apache.eventmesh.dashboard.console.function.report.collect;
  * <p>
  * TODO  OK
  *     meta 数据是否放到 ectd 里面。1 到 5 同步
+ * 
  */
 public interface Collect {
 
+
+    void collect(int index, DataSyncHandlerWrapper dataSyncHandlerWrapper);
 }

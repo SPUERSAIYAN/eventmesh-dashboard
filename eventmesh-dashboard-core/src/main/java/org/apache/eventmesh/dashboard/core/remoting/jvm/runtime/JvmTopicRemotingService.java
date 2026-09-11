@@ -18,6 +18,7 @@
 
 package org.apache.eventmesh.dashboard.core.remoting.jvm.runtime;
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.CreateTopic2Request;
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.CreateTopicResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.DeleteTopicRequest;
@@ -26,26 +27,35 @@ import org.apache.eventmesh.dashboard.common.model.remoting.topic.GetTopics2Requ
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.GetTopicsResult;
 import org.apache.eventmesh.dashboard.service.remoting.TopicRemotingService;
 
+import java.util.List;
+
+
 
 public class JvmTopicRemotingService extends AbstractJvmRemotingService implements TopicRemotingService {
 
     @Override
     public CreateTopicResult createTopic(CreateTopic2Request createTopicRequest) {
         CreateTopicResult createTopicResult = new CreateTopicResult();
+        createTopicResult.setCode(200);
         //this.defaultMQAdminExt.createAndUpdateTopicConfig(master, topicConfig);
-        return null;
+        return createTopicResult;
     }
 
     @Override
     public DeleteTopicResult deleteTopic(DeleteTopicRequest deleteTopicRequest) {
         DeleteTopicResult deleteTopicResult = new DeleteTopicResult();
+        deleteTopicResult.setCode(200);
         //this.defaultMQAdminExt.deleteTopic(deleteTopicRequest.getTopicMetadata().getTopicName(), null);
-        return null;
+        return deleteTopicResult;
     }
 
     @Override
-    public GetTopicsResult getAllTopics(GetTopics2Request getTopicsRequest) throws Exception {
+    public GetTopicsResult getAllTopics(GetTopics2Request getTopicsRequest) {
+        return this.randomUpdateMockDatabaseData(List.of("topicName"), this.tt(new GetTopicsResult()));
+    }
 
-        return null;
+    @Override
+    protected MetadataType metadataType() {
+        return MetadataType.TOPIC;
     }
 }

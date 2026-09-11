@@ -20,26 +20,24 @@ package org.apache.eventmesh.dashboard.console.function.report.collect.active;
 import org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata;
 import org.apache.eventmesh.dashboard.common.model.metadata.RuntimeMetadata;
 import org.apache.eventmesh.dashboard.console.function.report.collect.Collect;
+import org.apache.eventmesh.dashboard.console.function.report.model.base.ClusterId;
+import org.apache.eventmesh.dashboard.console.function.report.model.base.RuntimeId;
 import org.apache.eventmesh.dashboard.console.function.report.model.base.Time;
 import org.apache.eventmesh.dashboard.core.function.SDK.AbstractClientInfo;
 import org.apache.eventmesh.dashboard.core.function.SDK.SDKTypeEnum;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import lombok.Setter;
 
+@Deprecated
 public abstract class AbstractCollect<C> extends AbstractClientInfo<C> implements Collect {
 
     protected List<Time> times = new ArrayList<>();
 
     protected List<Time> standby = new ArrayList<>();
-
-
-    @Override
-    protected SDKTypeEnum getSdkTypeEnum() {
-        return SDKTypeEnum.ADMIN;
-    }
 
     public List<Time> collect() {
         List<Time> list;
@@ -52,17 +50,37 @@ public abstract class AbstractCollect<C> extends AbstractClientInfo<C> implement
         return list;
     }
 
+    @Override
+    protected SDKTypeEnum getSdkTypeEnum() {
+        return SDKTypeEnum.ADMIN;
+    }
 
     @Setter
-    public abstract static  class AbstractClusterCollect<C> extends AbstractClientInfo<C> {
+    public abstract static class AbstractClusterCollect<C, D extends ClusterId> extends AbstractClientInfo<C> {
 
         private ClusterMetadata clusterMetadata;
+
+        public Long padding(D data) {
+            data.setClustersId(clusterMetadata.getClusterId());
+            data.setClustersName(clusterMetadata.getName());
+            return clusterMetadata.getClusterId();
+        }
+
 
     }
 
     @Setter
-    public abstract static  class AbstractRuntimeCollect<C> extends AbstractClusterCollect<C> {
+    public abstract static class AbstractRuntimeCollect<C, D extends RuntimeId> extends AbstractClusterCollect<C, D> {
 
-        private List<RuntimeMetadata> runtimeMetadataList;
+        private Map<String, RuntimeMetadata> runtimeMetadataMap;
+
+
+        @Override
+        public Long padding(D data) {
+            RuntimeMetadata runtimeMetadata = runtimeMetadataMap.get(data.getRuntimeName());
+            data.setRuntimeId(runtimeMetadata.getId());
+            data.setRuntimeName(runtimeMetadata.getName());
+            return runtimeMetadata.getId();
+        }
     }
 }

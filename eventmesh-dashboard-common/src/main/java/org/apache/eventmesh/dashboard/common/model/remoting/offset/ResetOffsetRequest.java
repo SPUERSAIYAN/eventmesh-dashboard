@@ -19,7 +19,7 @@
 package org.apache.eventmesh.dashboard.common.model.remoting.offset;
 
 
-import org.apache.eventmesh.dashboard.common.enums.ResetOffsetMode;
+import org.apache.eventmesh.dashboard.common.enums.message.ResetOffsetMode;
 import org.apache.eventmesh.dashboard.common.model.remoting.Global2Request;
 
 import lombok.Data;

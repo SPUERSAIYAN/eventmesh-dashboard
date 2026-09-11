@@ -20,9 +20,12 @@ package org.apache.eventmesh.dashboard.console.entity.cluster;
 import org.apache.eventmesh.dashboard.common.enums.CollectType;
 import org.apache.eventmesh.dashboard.console.entity.base.BaseClusterIdEntity;
 
-/**
- *
- */
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+
+@Data
+@EqualsAndHashCode(callSuper = true)
 public class CollectEntity extends BaseClusterIdEntity {
 
 

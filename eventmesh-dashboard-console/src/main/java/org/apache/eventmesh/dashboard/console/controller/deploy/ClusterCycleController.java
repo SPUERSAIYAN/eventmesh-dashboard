@@ -18,7 +18,6 @@
 
 package org.apache.eventmesh.dashboard.console.controller.deploy;
 
-import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.console.controller.deploy.create.CreateClusterByCopyHandler;
 import org.apache.eventmesh.dashboard.console.controller.deploy.create.CreateClusterByDeployScriptHandler;
 import org.apache.eventmesh.dashboard.console.controller.deploy.create.CreateClusterByFullMetadataHandler;
@@ -26,13 +25,8 @@ import org.apache.eventmesh.dashboard.console.controller.deploy.create.CreateRun
 import org.apache.eventmesh.dashboard.console.model.deploy.create.CreateClusterByCopyDTO;
 import org.apache.eventmesh.dashboard.console.model.deploy.create.CreateClusterByDeployScriptDO;
 import org.apache.eventmesh.dashboard.console.model.deploy.create.CreateClusterByFullMetadataDTO;
-import org.apache.eventmesh.dashboard.console.model.deploy.create.CreateClusterByServiceAddressDTO;
 import org.apache.eventmesh.dashboard.console.model.deploy.create.CreateRuntimeByDeployScriptDTO;
 import org.apache.eventmesh.dashboard.console.model.dto.cluster.VerifyNameDTO;
-import org.apache.eventmesh.dashboard.console.service.cluster.ClusterService;
-import org.apache.eventmesh.dashboard.console.service.cluster.RuntimeService;
-
-import java.util.Objects;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -80,14 +74,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ClusterCycleController {
 
     @Autowired
-    private RuntimeService runtimeService;
-
-    @Autowired
-    private ClusterService clusterService;
-
-    @Autowired
     private CreateRuntimeByDeployScriptHandler createRuntimeByDeployScriptHandler;
-
 
     @Autowired
     private CreateClusterByDeployScriptHandler createClusterByDeployScriptHandler;
@@ -112,31 +99,6 @@ public class ClusterCycleController {
     @PostMapping("createRuntimeByDeployScript")
     public void createRuntimeByDeployScript(@RequestBody @Validated CreateRuntimeByDeployScriptDTO createRuntimeByDeployScriptDTO) {
         this.createRuntimeByDeployScriptHandler.handler(createRuntimeByDeployScriptDTO);
-    }
-
-    /**
-     *
-     */
-    @PostMapping("createClusterByServiceAddress")
-    public void createClusterByServiceAddress(CreateClusterByServiceAddressDTO dto) {
-
-        if (Objects.equals(dto.getClusterType(), ClusterType.STORAGE_ROCKETMQ_CLUSTER)) {
-            dto.setClusterType(null);
-        }
-
-    }
-
-
-    public void createClusterByFullAddress() {
-
-    }
-
-    public void createClusterByMetaAddress() {
-
-    }
-
-    public void createClusterByRuntimeAddress() {
-
     }
 
     @PostMapping("createClusterByDeployScript")

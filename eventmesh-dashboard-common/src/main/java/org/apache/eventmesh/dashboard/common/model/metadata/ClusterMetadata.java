@@ -29,7 +29,7 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class ClusterMetadata extends BaseSyncBase {
 
-    private String clusterName;
+    private String name;
 
     private ClusterTrusteeshipType trusteeshipType;
 

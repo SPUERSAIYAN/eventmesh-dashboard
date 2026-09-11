@@ -45,7 +45,7 @@ public class CollectExporterTest {
         ClusterMetadata clusterMetadata = new ClusterMetadata();
         clusterMetadata.setOrganizationId(1L);
         clusterMetadata.setClusterId(2L);
-        clusterMetadata.setClusterName("test");
+        clusterMetadata.setName("test");
         collectExporter.setClusterMetadata(clusterMetadata);
 
         ReportEngine reportEngine = new IotDBReportEngine();

@@ -99,13 +99,13 @@ public interface TopicMapper extends SyncDataHandlerMapper<TopicEntity> {
 
     @Insert("""
         <script>
-        insert into topic (cluster_id,
+        insert into topic (cluster_type,cluster_id,
                           runtime_id,
                           topic_name,topic_type, read_queue_num, write_queue_num, replication_factor, 
                            `order` , description, create_progress,retention_ms)
            values
                <foreach collection='list' item='c' index='index' separator=','>
-                        (#{c.clusterId},
+                        (#{c.clusterType},#{c.clusterId},
                         <if test='c.runtimeId !=null'>
                             #{c.runtimeId},
                         </if>
@@ -143,7 +143,19 @@ public interface TopicMapper extends SyncDataHandlerMapper<TopicEntity> {
 
     @Override
     @Select("""
-            select * from topic where update_time >= #{updateTime} and status != 0
+            <script>
+            select * from topic where
+                <if test="runtimeId != null">
+                    runtime_id=#{runtimeId}
+                </if>
+                <if test="clusterId !=null">
+                    cluster_id=#{clusterId}
+                </if>
+                <if test = "updateTime!=null">
+                    update_time >= #{updateTime}
+                </if>
+                 and status != 0
+            </script>
         """)
     List<TopicEntity> syncGet(TopicEntity topicEntity);
 

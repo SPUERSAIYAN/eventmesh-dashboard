@@ -42,6 +42,7 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -52,9 +53,17 @@ import org.springframework.stereotype.Component;
 public class CreateClusterByDeployScriptHandler implements UpdateHandler<CreateClusterByDeployScriptDO> {
 
     private final List<RuntimeEntity> runtimeEntityList = new ArrayList<>();
+
+    @Autowired
     private ClusterService clusterService;
+
+    @Autowired
     private ConfigService configService;
+
+    @Autowired
     private RuntimeService runtimeService;
+
+    @Autowired
     private ClusterRelationshipService clusterRelationshipService;
     private ClusterEntity clusterEntity;
     private ClusterFramework clusterFramework;
@@ -64,12 +73,6 @@ public class CreateClusterByDeployScriptHandler implements UpdateHandler<CreateC
     @Override
     public void init() {
 
-    }
-
-    private void handlerMetadata(ClusterEntity clusterEntity) {
-        this.clusterType = clusterEntity.getClusterType();
-        this.replicationType = clusterEntity.getReplicationType();
-        this.clusterFramework = ClusterSyncMetadataEnum.getClusterFramework(clusterEntity.getClusterType());
     }
 
     /**
@@ -98,6 +101,12 @@ public class CreateClusterByDeployScriptHandler implements UpdateHandler<CreateC
         }
 
         this.runtimeService.batchInsert(this.runtimeEntityList);
+    }
+
+    private void handlerMetadata(ClusterEntity clusterEntity) {
+        this.clusterType = clusterEntity.getClusterType();
+        this.replicationType = clusterEntity.getReplicationType();
+        this.clusterFramework = ClusterSyncMetadataEnum.getClusterFramework(clusterEntity.getClusterType());
     }
 
     private void ordinaryRuntime(CreateClusterByDeployScriptDO createClusterByDeployScriptDO) {

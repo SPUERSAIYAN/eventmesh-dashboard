@@ -33,17 +33,18 @@ public interface ReportEngine {
 
     CompletableFuture<List<Map<String, Object>>> query(SingleGeneralReportDO singleGeneralReportDO);
 
-
     void createReport(String tableName);
 
     void batchInsert(String tableName, List<Object> data);
-
 
     default void batchInsert(Map<String, List<Object>> data) {
         data.forEach(this::batchInsert);
     }
 
+    void batchInsertByClass(Map<Class<?>, List<Object>> data);
+
     void deleteData();
 
     void createReportHandler(ReportMetaData reportMetaData, List<Field> fieldList);
+
 }

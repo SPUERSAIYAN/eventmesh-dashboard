@@ -18,6 +18,7 @@
 
 package org.apache.eventmesh.dashboard.core.remoting.jvm;
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.model.remoting.user.CreateUserRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.user.DeleterUserRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.user.GetUserRequest;
@@ -39,6 +40,11 @@ public class JvmUserRemotingService extends AbstractJvmRemotingService implement
 
     @Override
     public GetUserResult getInstanceUser(GetUserRequest request) {
+        return null;
+    }
+
+    @Override
+    protected MetadataType metadataType() {
         return null;
     }
 }

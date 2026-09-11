@@ -79,13 +79,13 @@ public class ActiveCreateController {
         return clusterEntity.getId();
     }
 
+    /**
+     *  手动创建集群，
+     */
     @PostMapping("createCluster")
     public Long createCluster(@RequestBody @Validated CreateClusterDTO dto) {
         ClusterEntity clusterEntity = ActiveCreateControllerMapper.INSTANCE.createCluster(dto);
-        clusterEntity.setClusterType(ClusterType.EVENTMESH_CLUSTER);
-        clusterEntity.setClusterOwnType(ClusterOwnType.INDEPENDENCE);
         clusterEntity.setAuthType("");
-        clusterEntity.setVersion("");
         clusterEntity.setRuntimeIndex(Integer.valueOf(0));
         clusterEntity.setDeployStatusType(DeployStatusType.CREATE_SUCCESS);
         clusterEntity.setResourcesConfigId(0L);
@@ -104,6 +104,11 @@ public class ActiveCreateController {
     }
 
 
+    /**
+     * 通过配置信息直接创建一个集群，
+     * @param dto
+     * @return
+     */
     @PostMapping("createTheEntireCluster")
     public Long createTheEntireCluster(@RequestBody @Validated CreateTheEntireClusterDTO dto) {
         ClusterEntity clusterEntity = ActiveCreateControllerMapper.INSTANCE.createCluster(dto.getCreateClusterDTO());
@@ -117,6 +122,7 @@ public class ActiveCreateController {
     }
 
     /**
+     * 直接通过一个配置创建完整体的 eventmesh 集群
      * TODO 先完成 数据 直接录入的实现，
      *      在完成 通过 API 调用获得 broker config 补充 broker 与 cluster 信息，以及 cluster 组织关系
      *      保留 两套机制，还是只留下 通过 API 获得信息的机制？

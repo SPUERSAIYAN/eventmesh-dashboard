@@ -22,10 +22,10 @@ import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata;
 import org.apache.eventmesh.dashboard.console.function.report.annotation.ReportMetaData;
 import org.apache.eventmesh.dashboard.console.function.report.annotation.ReportMetaData.AggregationClass;
+import org.apache.eventmesh.dashboard.console.function.report.collect.AbstractCollect;
 import org.apache.eventmesh.dashboard.console.function.report.model.base.ClusterId;
 import org.apache.eventmesh.dashboard.console.function.report.model.base.OrganizationId;
 import org.apache.eventmesh.dashboard.console.function.report.model.base.RuntimeId;
-import org.apache.eventmesh.dashboard.console.function.report.model.base.Time;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -40,7 +40,6 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,34 +51,29 @@ import lombok.Data;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+
 @Setter
 @Slf4j
-public class CollectExporter {
+public class CollectExporter extends AbstractCollect {
 
-
-    protected ClusterType clusterType;
-    protected ClusterMetadata clusterMetadata;
-    protected List<Time> times = new ArrayList<>();
-    protected List<Time> standby = new ArrayList<>();
-    private Map<String, ReportMetaData> reportMetaDataMap = new HashMap<>();
-    private Map<String, ReportMetaData> aggregationMetaDataMap = new HashMap<>();
-    private Map<String, AggregationWrapper> aggregationWrapperMap = new HashMap<>();
-    private Map<String, String> fieldMapper = new HashMap<>();
-
-    private Map<String, Map<String, Field>> objectFieldMapper = new HashMap<>();
-
-    private HttpClient client = HttpClient.newHttpClient();
-
-    private ClusterSyncMetadataEnum clusterSyncMetadataEnum;
-
-    @Setter
-    private String url;
 
     public static LocalDateTime millisToLocalDateTime(long millis) {
         return Instant.ofEpochMilli(millis)
             .atZone(ZoneId.systemDefault())
             .toLocalDateTime();
     }
+
+    protected ClusterType clusterType;
+    protected ClusterMetadata clusterMetadata;
+    private Map<String, ReportMetaData> reportMetaDataMap = new HashMap<>();
+    private Map<String, ReportMetaData> aggregationMetaDataMap = new HashMap<>();
+    private Map<String, AggregationWrapper> aggregationWrapperMap = new HashMap<>();
+    private Map<String, String> fieldMapper = new HashMap<>();
+    private Map<String, Map<String, Field>> objectFieldMapper = new HashMap<>();
+    private HttpClient client = HttpClient.newHttpClient();
+    private ClusterSyncMetadataEnum clusterSyncMetadataEnum;
+    @Setter
+    private String url;
 
     public void init() {
         reportMetaDataMap.forEach((clusterMetadata, reportMetaData) -> {
@@ -104,17 +98,6 @@ public class CollectExporter {
             });
         });
         this.clusterSyncMetadataEnum = ClusterSyncMetadataEnum.valueOf(this.clusterMetadata.getClusterType().name());
-    }
-
-    public List<Time> collect() {
-        List<Time> list;
-        this.standby.clear();
-        synchronized (this) {
-            list = this.times;
-            this.times = this.standby;
-            this.standby = list;
-        }
-        return list;
     }
 
     public void request() {
@@ -176,8 +159,7 @@ public class CollectExporter {
         if (Objects.isNull(object)) {
             return;
         }
-        this.times.add(object);
-
+        this.setData(object);
     }
 
     public ClusterId buildObject(String key, JSONObject jsonObject, String value, LocalDateTime time) {
@@ -212,6 +194,11 @@ public class CollectExporter {
 
     }
 
+    @Override
+    protected void doCollect() {
+        this.request();
+    }
+
     private ClusterId createObject(Map<String, Field> stringFieldMapper, ReportMetaData reportMetaData, LocalDateTime time, JSONObject jsonObject)
         throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
         Class<?> clazz = reportMetaData.getClazz();
@@ -238,7 +225,7 @@ public class CollectExporter {
             }
         } else {
             object.setClustersId(this.clusterMetadata.getClusterId());
-            object.setClustersName(this.clusterMetadata.getClusterName());
+            object.setClustersName(this.clusterMetadata.getName());
         }
         object.setTime(time);
         stringFieldMapper.forEach((fieldName, field) -> {

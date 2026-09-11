@@ -18,12 +18,16 @@
 
 package org.apache.eventmesh.dashboard.console.service.metadata;
 
+import org.apache.eventmesh.dashboard.common.model.base.BaseSyncBase;
+import org.apache.eventmesh.dashboard.common.model.remoting.Global2Request;
 import org.apache.eventmesh.dashboard.console.entity.base.BaseClusterIdEntity;
+import org.apache.eventmesh.dashboard.console.entity.base.BaseRuntimeIdEntity;
 import org.apache.eventmesh.dashboard.console.mapper.SyncDataHandlerMapper;
 import org.apache.eventmesh.dashboard.core.metadata.DataMetadataHandler;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.ibatis.binding.MapperProxy;
 
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Proxy;
@@ -36,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import javax.annotation.Nullable;
 import javax.annotation.PostConstruct;
 
 import org.springframework.beans.BeansException;
@@ -51,9 +56,9 @@ public abstract class AbstractDBDataMetadataHandler<T extends BaseClusterIdEntit
 
     private static final Map<Type, Object> CLASS_SYNC_DATA_HANDLER_MAPPER_MAP = new HashMap<>();
     protected SyncDataHandlerMapper<T> syncDataHandlerMapper;
+    private final List<T> dataList = new ArrayList<>(1);
     private AbstractApplicationContext applicationContext;
     private T baseRuntimeIdBase;
-    private List<T> dataList = new ArrayList<>(1);
 
     /**
      * TODO
@@ -62,6 +67,7 @@ public abstract class AbstractDBDataMetadataHandler<T extends BaseClusterIdEntit
      *          1. 如果 check 第一次全量加载
      *          2. 如果 不 check ， 不需要全量加载
      */
+    @SuppressWarnings({"unchecked", "AliDeprecation", "deprecation"})
     @PostConstruct
     public void init() {
         Type superClass = getClass().getGenericSuperclass();
@@ -99,7 +105,7 @@ public abstract class AbstractDBDataMetadataHandler<T extends BaseClusterIdEntit
     }
 
     @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+    public void setApplicationContext(@Nullable ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = (AbstractApplicationContext) applicationContext;
     }
 
@@ -135,9 +141,42 @@ public abstract class AbstractDBDataMetadataHandler<T extends BaseClusterIdEntit
         }
     }
 
+    @SuppressWarnings("unchecked")
+    @Override
+    public List<T> getData(Global2Request global2Request) {
+        if (Objects.isNull(global2Request)) {
+            return this.syncDataHandlerMapper.syncGet(this.baseRuntimeIdBase);
+        }
+        Class<?> clazz = null;
+        try {
+            MapperProxy<Object> mapperProxy = (MapperProxy<Object>) Proxy.getInvocationHandler(this.syncDataHandlerMapper);
+            Class<?> mapperInterface = (Class<?>) FieldUtils.readField(mapperProxy, "mapperInterface", true);
+            Type[] genericInterfaces = mapperInterface.getGenericInterfaces();
+            for (Type type : genericInterfaces) {
+                if (type instanceof ParameterizedType) {
+                    ParameterizedType parameterizedType = (ParameterizedType) type;
+
+                    Type[] actualTypeArguments = parameterizedType.getActualTypeArguments();
+                    Type actualType = actualTypeArguments[0];
+                    clazz = (Class<?>) actualType;
+                }
+            }
+            BaseRuntimeIdEntity baseClusterIdEntity = (BaseRuntimeIdEntity) clazz.newInstance();
+            baseClusterIdEntity.setClusterId(global2Request.getClusterId());
+            baseClusterIdEntity.setRuntimeId(global2Request.getRuntimeId());
+            return this.syncDataHandlerMapper.syncGet((T) baseClusterIdEntity);
+        } catch (IllegalAccessException | InstantiationException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    public List<T> getClusterIdOrRuntime(BaseSyncBase baseSyncBase) {
+        return this.syncDataHandlerMapper.syncGet(this.baseRuntimeIdBase);
+    }
+
     List<T> doGetData() {
         return this.dataList;
     }
-
 
 }

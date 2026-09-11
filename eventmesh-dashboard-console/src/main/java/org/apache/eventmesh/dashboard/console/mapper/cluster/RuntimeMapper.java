@@ -39,6 +39,7 @@ import java.util.List;
 @Mapper
 public interface RuntimeMapper extends SyncDataHandlerMapper<RuntimeEntity> {
 
+
     @Select("""
         <script>
             select * from runtime where cluster_id =#{runtimeEntity.clusterId}
@@ -61,6 +62,9 @@ public interface RuntimeMapper extends SyncDataHandlerMapper<RuntimeEntity> {
     )
     List<RuntimeEntity> queryRuntimeToFrontByClusterIdList(List<ClusterEntity> clusterEntityList);
 
+    /**
+     * 查询 子集群的主集群中的某个类型的集群。
+     */
     @Select("""
         <script>
             select * from runtime where cluster_id in(
@@ -76,9 +80,6 @@ public interface RuntimeMapper extends SyncDataHandlerMapper<RuntimeEntity> {
             )
         </script>
         """)
-    /**
-     * 查询 子集群的主集群中的某个类型的集群。
-     */
     List<RuntimeEntity> queryClusterRuntimeOnClusterSpecifyByClusterId(QueryRuntimeByBigExpandClusterDO queryRuntimeByBigExpandClusterDO);
 
     /**
@@ -210,12 +211,15 @@ public interface RuntimeMapper extends SyncDataHandlerMapper<RuntimeEntity> {
     @Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
     void insertRuntime(RuntimeEntity runtimeEntity);
 
+    @Override
     void syncInsert(List<RuntimeEntity> runtimeEntities);
 
+    @Override
     void syncUpdate(List<RuntimeEntity> runtimeEntities);
 
+    @Override
     void syncDelete(List<RuntimeEntity> runtimeEntities);
 
-
+    @Override
     List<RuntimeEntity> syncGet(RuntimeEntity topicEntity);
 }

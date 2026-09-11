@@ -19,6 +19,8 @@ package org.apache.eventmesh.dashboard.common.enums;
 
 public enum SyncStatus {
 
+    PERSISTENCE,
+
     ING,
 
     SUCCESS,

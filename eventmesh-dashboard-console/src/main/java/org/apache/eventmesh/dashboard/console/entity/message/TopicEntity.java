@@ -47,6 +47,8 @@ public class TopicEntity extends BaseRuntimeIdEntity {
      */
     private Integer replicationFactor;
 
+    private Long saveTime;
+
     /**
      * topic 拦截器类型
      */

@@ -38,7 +38,7 @@ public class BothNotCacheDifference extends AbstractBothDifference {
             return;
         }
         if (CollectionUtils.isEmpty(sourcetList)) {
-            /**
+            /*
              *   TODO
              *       有这种极端环境吗？
              *       两边都删除 缓存为空

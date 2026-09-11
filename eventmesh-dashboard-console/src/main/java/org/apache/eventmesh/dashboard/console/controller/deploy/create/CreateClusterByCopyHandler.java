@@ -31,7 +31,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
@@ -63,7 +62,6 @@ public class CreateClusterByCopyHandler extends AbstractUpdateHandler implements
         data.setTopicMap(new HashMap<>());
         data.getTopicMap().put(MetadataType.CLUSTER, new HashMap<>());
         data.getTopicMap().put(MetadataType.RUNTIME, new HashMap<>());
-        Map<MetadataType, Map<Long, List<TopicEntity>>> topicMap = data.getTopicMap();
 
         List<TopicEntity> topciEntityList = this.topicService.queryByClusterIdList(data.getClusterEntityList());
         topciEntityList.forEach(topicEntity -> {
@@ -73,16 +71,13 @@ public class CreateClusterByCopyHandler extends AbstractUpdateHandler implements
         });
         // config
         data.setConfigMap(new HashMap<>());
-        Arrays.stream(MetadataType.values()).toList().forEach(metadataType -> {
-            data.getTopicMap().put(metadataType, new HashMap<>());
-        });
+        Arrays.stream(MetadataType.values()).toList().forEach(metadataType -> data.getTopicMap().put(metadataType, new HashMap<>()));
 
         List<ConfigEntity> configEntityList = this.configService.queryByClusterIdList(data.getClusterEntityList());
 
-        configEntityList.forEach(configEntity -> {
-            data.getConfigMap().get(configEntity.getInstanceType()).computeIfAbsent(configEntity.getInstanceId(), k -> new ArrayList<>())
-                .add(configEntity);
-        });
+        configEntityList.forEach(configEntity -> data.getConfigMap().get(configEntity.getInstanceType())
+            .computeIfAbsent(configEntity.getInstanceId(), k -> new ArrayList<>())
+            .add(configEntity));
 
         this.deployService.createDeploy(data);
 

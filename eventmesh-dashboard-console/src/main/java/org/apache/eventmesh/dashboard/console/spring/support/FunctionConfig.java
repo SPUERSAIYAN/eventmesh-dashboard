@@ -17,13 +17,24 @@
 
 package org.apache.eventmesh.dashboard.console.spring.support;
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.console.function.report.ReportConfig;
+
+import java.util.HashSet;
+import java.util.Set;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import lombok.Data;
 
+/**
+ * <pre>
+ *     很多字段都是为了开发，所有功能启动，不好调试
+ * </pre>
+ *
+ * 
+ */
 @Data
 @Component
 @ConfigurationProperties(prefix = "function")
@@ -31,6 +42,14 @@ public class FunctionConfig {
 
     private ReportConfig reportConfig;
 
+    private boolean enabledHealth = true;
 
+    private boolean enabledSync = true;
+
+    private boolean enabledReport = true;
+
+    private Set<MetadataType> includeSyncType = new HashSet<>();
+
+    private boolean mockJvm = false;
 
 }

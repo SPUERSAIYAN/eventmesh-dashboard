@@ -20,11 +20,11 @@ package org.apache.eventmesh.dashboard.console.function.report.model.rocketmq;
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.console.function.report.ReportViewType;
 import org.apache.eventmesh.dashboard.console.function.report.annotation.ReportMeta;
-import org.apache.eventmesh.dashboard.console.function.report.model.base.not.SubscribeId.LongValue;
+import org.apache.eventmesh.dashboard.console.function.report.model.base.not.SubscribeId.SubscribeLongValue;
 
 @ReportMeta(clusterType = ClusterType.STORAGE_ROCKETMQ, reportName = "rocketmq_consumer_lag_latency",
     defaultViewType = ReportViewType.GAUGE, tableName = "rocketmq_consumer_lag_latency",
     comment = "消费处理延迟时间")
-public class RocketmqConsumerLagLatency extends LongValue {
+public class RocketmqConsumerLagLatency extends SubscribeLongValue {
 
 }

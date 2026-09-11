@@ -21,6 +21,7 @@ package org.apache.eventmesh.dashboard.core.remoting;
 import org.apache.eventmesh.dashboard.common.annotation.RemotingServiceMapper;
 import org.apache.eventmesh.dashboard.common.annotation.RemotingServiceMethodMapper;
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
+import org.apache.eventmesh.dashboard.common.enums.SyncStatus;
 import org.apache.eventmesh.dashboard.common.model.base.BaseClusterIdBase;
 import org.apache.eventmesh.dashboard.common.model.base.BaseRuntimeIdBase;
 import org.apache.eventmesh.dashboard.common.model.base.BaseSyncBase;
@@ -37,6 +38,7 @@ import org.apache.commons.lang3.ArrayUtils;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -44,11 +46,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 
+
+@Slf4j
 public class Remoting2Manage {
 
     private static final Remoting2Manage INSTANCE = new Remoting2Manage();
@@ -57,16 +63,8 @@ public class Remoting2Manage {
 
     private static final Map<Class<?>, Map<RemotingActionType, RemotingServiceMethodMapperWrapper>> CLASS_METHOD_MAPPER = new HashMap<>();
 
-    static {
-        ClasspathScanner classpathScanner = ClasspathScanner.builder().base(Remoting2Manage.class).subPath("/**").build();
-        try {
-            classpathScanner.getClazz().forEach(Remoting2Manage::registerService);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private Remoting2Manage() {
+    public static Remoting2Manage getInstance() {
+        return INSTANCE;
     }
 
     /**
@@ -125,8 +123,29 @@ public class Remoting2Manage {
 
     }
 
-    public static Remoting2Manage getInstance() {
-        return INSTANCE;
+    static {
+        ClasspathScanner classpathScanner = ClasspathScanner.builder().base(Remoting2Manage.class).subPath("/**").build();
+        try {
+            classpathScanner.getClazz().forEach(Remoting2Manage::registerService);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private final List<RemotingServiceHandler> remotingServiceHandlerList = new ArrayList<>();
+
+    private final List<RemotingResultHook> remotingResultHookList = new ArrayList<>();
+
+    private Remoting2Manage() {
+    }
+
+
+    public void registerHook(RemotingResultHook remotingResultHook) {
+        this.remotingResultHookList.add(remotingResultHook);
+    }
+
+    public void registerServiceHandler(RemotingServiceHandler remotingServiceHandler) {
+        this.remotingServiceHandlerList.add(remotingServiceHandler);
     }
 
     /**
@@ -144,6 +163,11 @@ public class Remoting2Manage {
         AbstractRemotingService<BaseClusterIdBase> proxyObject =
             SDKManage.getInstance().createAbstractClientInfo(remotingServiceMetadataWrapper.remotingServiceType, baseSyncBase);
         RemotingService<BaseClusterIdBase> remotingService = new RemotingService<>();
+        if (!this.remotingServiceHandlerList.isEmpty()) {
+            this.remotingServiceHandlerList.forEach(remotingServiceHandler -> {
+                remotingServiceHandler.serviceInit(proxyObject);
+            });
+        }
         remotingService.execution = proxyObject;
         remotingService.wrapper = remotingServiceMetadataWrapper;
         remotingService.baseSyncBase = baseSyncBase;
@@ -161,136 +185,6 @@ public class Remoting2Manage {
         RemotingService<T> remotingService = (RemotingService<T>) this.createDataMetadataHandler(clazz, baseSyncBase);
         return (T) remotingService.getExecution();
     }
-
-    /**
-     * 这个类，只支持 DataMetadataHandler 通道调用
-     */
-    @SuppressWarnings("unchecked")
-    @Slf4j
-    public static class RemotingService<T> implements DataMetadataHandler<T> {
-
-        private RemotingServiceMetadataWrapper wrapper;
-
-        @Getter
-        private Object execution;
-
-        private BaseSyncBase baseSyncBase;
-
-        private Long clusterId;
-
-        private Long runtimeId;
-
-        @Override
-        public void handleAll(Collection<T> allData, List<T> addData, List<T> updateData, List<T> deleteData) {
-            this.execute(addData, RemotingActionType.ADD);
-            this.execute(updateData, RemotingActionType.UPDATE);
-            this.execute(deleteData, RemotingActionType.DELETE);
-        }
-
-        private void execute(List<T> data, RemotingActionType remotingActionType) {
-            if (CollectionUtils.isEmpty(data)) {
-                return;
-            }
-            data.forEach((value) -> {
-                this.execution(value, remotingActionType);
-            });
-        }
-
-        private Object execution(T object, RemotingActionType remotingActionType) {
-            RemotingServiceMethodMapperWrapper methodMapper = wrapper.actionMap.get(remotingActionType);
-            Object arg;
-            BaseRuntimeIdBase baseRuntimeIdBase = null;
-            boolean error = false;
-            String errorMessage = null;
-            try {
-                baseRuntimeIdBase = (BaseRuntimeIdBase) object;
-                arg = this.buildRequest(methodMapper, object);
-                GlobalResult<T> result = this.invoke(methodMapper, arg);
-                if (Objects.isNull(result) && methodMapper.notResult) {
-                    return null;
-                }
-                if (Objects.isNull(result)) {
-                    log.error(" result is null, service is {} action is {} , method name is {} arg is {}",
-                        wrapper.remotingServiceType.getSimpleName(),
-                        remotingActionType, methodMapper.remotingServiceMethod.getName(), object);
-                    if (Objects.equals(RemotingActionType.QUEUE_ALL, remotingActionType)) {
-                        return Collections.EMPTY_LIST;
-                    }
-                    return null;
-                }
-                if (result.getCode() != 200) {
-                    error = true;
-                    errorMessage = result.getMessage();
-                }
-                return result.getData();
-            } catch (Exception e) {
-                error = true;
-                errorMessage = e.getMessage();
-                log.error(e.getMessage(), e);
-            } finally {
-                this.finallyFlow(object, error, errorMessage, baseRuntimeIdBase, remotingActionType);
-            }
-            return null;
-        }
-
-
-        @SuppressWarnings("unchecked")
-        private Object buildRequest(RemotingServiceMethodMapperWrapper methodMapper, T object) throws InstantiationException, IllegalAccessException {
-            if (Objects.nonNull(methodMapper.parameterTypes)) {
-                AbstractGlobal2Request<Object> request =
-                    (AbstractGlobal2Request<Object>) methodMapper.parameterTypes.newInstance();
-                request.setMetaData(object);
-                return request;
-            }
-            return null;
-        }
-
-        private GlobalResult<T> invoke(RemotingServiceMethodMapperWrapper methodMapper, Object arg)
-            throws InvocationTargetException, IllegalAccessException {
-            if (Objects.isNull(arg)) {
-                return (GlobalResult<T>) methodMapper.remotingServiceMethod.invoke(execution);
-            } else {
-                return (GlobalResult<T>) methodMapper.remotingServiceMethod.invoke(execution, arg);
-            }
-        }
-
-        private void finallyFlow(T object, boolean error, String errorMessage, BaseRuntimeIdBase baseRuntimeIdBase,
-            RemotingActionType remotingActionType) {
-            if (error && Objects.isNull(baseRuntimeIdBase)) {
-                log.error("baseRuntimeIdBase is null {}", Objects.isNull(object) ? "" : object.getClass().getSimpleName());
-                return;
-            }
-            if (Objects.equals(RemotingActionType.QUEUE_ALL, remotingActionType)) {
-                if (log.isTraceEnabled()) {
-                    log.trace("$sync from  runtime loadData ,service {} result {} errorMessage {} cluster {} runtime {}",
-                        wrapper.remotingServiceType.getSimpleName(),
-                        error ? "error" : "success",
-                        errorMessage,
-                        this.clusterId,
-                        this.runtimeId
-                    );
-                }
-            } else {
-                // TODO 如果失败，需要更新操作对象
-                log.info("$sync execute service {} result {} errorMessage {} action {} cluster {} runtime {} unique {}",
-                    wrapper.remotingServiceType.getSimpleName(),
-                    error ? "error" : "success",
-                    errorMessage,
-                    remotingActionType,
-                    baseRuntimeIdBase.getClusterId(),
-                    baseRuntimeIdBase.getRuntimeId(),
-                    baseRuntimeIdBase.getUnique());
-
-            }
-        }
-
-        @Override
-        public List<T> getData() {
-            return (List<T>) this.execution(null, RemotingActionType.QUEUE_ALL);
-
-        }
-    }
-
 
     static class RemotingServiceMetadataWrapper {
 
@@ -322,6 +216,165 @@ public class Remoting2Manage {
 
         private boolean notResult;
 
+
+    }
+
+    /**
+     * 这个类，只支持 DataMetadataHandler 通道调用
+     */
+    @SuppressWarnings("unchecked")
+    public class RemotingService<T> implements DataMetadataHandler<T> {
+
+        private final AtomicLong actionLong = new AtomicLong(1);
+        private RemotingServiceMetadataWrapper wrapper;
+        @Getter
+        private Object execution;
+        private BaseSyncBase baseSyncBase;
+        private Long clusterId;
+        private Long runtimeId;
+
+        private AtomicBoolean isAll = new AtomicBoolean(false);
+
+        @Override
+        public void handleAll(Collection<T> allData, List<T> addData, List<T> updateData, List<T> deleteData) {
+            Long index = actionLong.incrementAndGet();
+            if (CollectionUtils.isNotEmpty(allData)) {
+                if (isAll.compareAndSet(false, true)) {
+                    List<T> list = new ArrayList<>();
+                    allData.forEach(value -> {
+                        BaseRuntimeIdBase baseRuntimeIdBase = (BaseRuntimeIdBase) value;
+                        if (baseRuntimeIdBase.getSyncStatus() == SyncStatus.ING) {
+                            list.add(value);
+                        }
+                    });
+                    for (RemotingResultHook hook : remotingResultHookList) {
+                        hook.success(RemotingActionType.EXISTENCE, (List<BaseRuntimeIdBase>) list);
+                    }
+                }
+
+            }
+            this.execute(addData, RemotingActionType.ADD, index);
+            this.execute(updateData, RemotingActionType.UPDATE, index);
+            this.execute(deleteData, RemotingActionType.DELETE, index);
+        }
+
+        @Override
+        public List<T> getData() {
+            return (List<T>) this.execution(null, RemotingActionType.QUEUE_ALL, actionLong.incrementAndGet());
+
+        }
+
+        private void execute(List<T> data, RemotingActionType remotingActionType, Long index) {
+            if (CollectionUtils.isEmpty(data)) {
+                return;
+            }
+            data.forEach((value) -> {
+                this.execution(value, remotingActionType, index);
+            });
+        }
+
+        private Object execution(T object, RemotingActionType remotingActionType, Long index) {
+            RemotingServiceMethodMapperWrapper methodMapper = wrapper.actionMap.get(remotingActionType);
+            Object arg;
+            BaseRuntimeIdBase baseRuntimeIdBase = null;
+            GlobalResult<T> result = null;
+            Exception exception = null;
+            try {
+                baseRuntimeIdBase = (BaseRuntimeIdBase) object;
+                arg = this.buildRequest(methodMapper, object);
+                if (log.isTraceEnabled()) {
+                    log.trace(
+                        "#remoting manage , index {} Request metadata is {} method is {}  action is {} clusterId is{} runtime is {},"
+                        + " id is {} Unique is {} \n data is {}",
+                        index,
+                        wrapper.remotingServiceType.getSimpleName(),
+                        methodMapper.targetMethodName,
+                        remotingActionType,
+                        this.clusterId,
+                        this.runtimeId,
+                        baseRuntimeIdBase.getId(),
+                        baseRuntimeIdBase.getUnique(),
+                        arg);
+                }
+                result = this.invoke(methodMapper, arg);
+
+                if (log.isTraceEnabled()) {
+                    log.trace(
+                        """
+                        #remoting manage ,result  {} index {} Response metadata is {} method is {}  action is {} clusterId is{} runtime is {},
+                         id is {} Unique is {} \n Result is {}
+                        """,
+                        Objects.isNull(result) ? "success" : result.getCode() != 200 ? "error" : "success",
+                        index,
+                        wrapper.remotingServiceType.getSimpleName(),
+                        methodMapper.targetMethodName,
+                        remotingActionType,
+                        this.clusterId,
+                        this.runtimeId,
+                        baseRuntimeIdBase.getId(),
+                        baseRuntimeIdBase.getUnique(),
+                        result);
+                }
+            } catch (Exception e) {
+                exception = e;
+                if (log.isTraceEnabled()) {
+                    log.trace(
+                        "#remoting manage , result error  index {} Response metadata is {} method is {}  action is {} clusterId is{} "
+                        + " runtime is {}, id is {} Unique is {} \n Result is {}",
+                        index,
+                        wrapper.remotingServiceType.getSimpleName(),
+                        methodMapper.targetMethodName,
+                        remotingActionType,
+                        this.clusterId,
+                        this.runtimeId,
+                        baseRuntimeIdBase.getId(),
+                        baseRuntimeIdBase.getUnique(),
+                        result);
+                }
+                log.error(e.getMessage(), e);
+            }
+            if (!Objects.equals(RemotingActionType.QUEUE_ALL, remotingActionType)) {
+                if (Objects.nonNull(exception) || (Objects.nonNull(result) && result.getCode() != 200)) {
+                    for (RemotingResultHook hook : remotingResultHookList) {
+                        hook.fail(remotingActionType, baseRuntimeIdBase, (GlobalResult<Object>) result, exception);
+                    }
+                } else {
+                    for (RemotingResultHook hook : remotingResultHookList) {
+                        hook.success(remotingActionType, baseRuntimeIdBase, (GlobalResult<Object>) result);
+                    }
+                }
+                if (Objects.isNull(result) && methodMapper.notResult) {
+                    return null;
+                }
+            }
+            if (Objects.isNull(result)) {
+                if (Objects.equals(RemotingActionType.QUEUE_ALL, remotingActionType)) {
+                    return Collections.EMPTY_LIST;
+                }
+                return null;
+            }
+            return result.getData();
+        }
+
+        @SuppressWarnings({"unchecked", "deprecation"})
+        private Object buildRequest(RemotingServiceMethodMapperWrapper methodMapper, T object) throws InstantiationException, IllegalAccessException {
+            if (Objects.nonNull(methodMapper.parameterTypes)) {
+                AbstractGlobal2Request<Object> request =
+                    (AbstractGlobal2Request<Object>) methodMapper.parameterTypes.newInstance();
+                request.setMetaData(object);
+                return request;
+            }
+            return object;
+        }
+
+        private GlobalResult<T> invoke(RemotingServiceMethodMapperWrapper methodMapper, Object arg)
+            throws InvocationTargetException, IllegalAccessException {
+            if (Objects.isNull(arg)) {
+                return (GlobalResult<T>) methodMapper.remotingServiceMethod.invoke(execution);
+            } else {
+                return (GlobalResult<T>) methodMapper.remotingServiceMethod.invoke(execution, arg);
+            }
+        }
 
     }
 

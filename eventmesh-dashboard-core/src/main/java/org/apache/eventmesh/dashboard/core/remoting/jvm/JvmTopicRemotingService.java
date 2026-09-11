@@ -18,6 +18,7 @@
 
 package org.apache.eventmesh.dashboard.core.remoting.jvm;
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.CreateTopic2Request;
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.CreateTopicResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.DeleteTopicRequest;
@@ -49,5 +50,10 @@ public class JvmTopicRemotingService extends AbstractJvmRemotingService implemen
         throws Exception {
 
         return null;
+    }
+
+    @Override
+    protected MetadataType metadataType() {
+        return MetadataType.TOPIC;
     }
 }

@@ -31,7 +31,6 @@ import java.util.Set;
 
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
-import org.springframework.util.ClassUtils;
 
 import lombok.Builder;
 import lombok.Data;
@@ -41,12 +40,12 @@ import lombok.Data;
 @Builder
 public class ClasspathScanner {
 
+
     private Class<?> base;
 
     private String baseString;
 
     private String subPath;
-
 
     private boolean allSubDirectory = true;
 
@@ -55,12 +54,6 @@ public class ClasspathScanner {
     private Set<Class<?>> annotationSet;
 
     private String designation;
-
-
-    private Resource[] getResource() throws IOException {
-        PathMatchingResourcePatternResolver resourcePatternResolver = new PathMatchingResourcePatternResolver();
-        return resourcePatternResolver.getResources(this.createLocationPattern());
-    }
 
     public List<Class<?>> getClazz() throws Exception {
         Resource[] resources = this.getResource();
@@ -96,6 +89,11 @@ public class ClasspathScanner {
         return resourcesList;
     }
 
+    private Resource[] getResource() throws IOException {
+        PathMatchingResourcePatternResolver resourcePatternResolver = new PathMatchingResourcePatternResolver();
+        return resourcePatternResolver.getResources(this.createLocationPattern());
+    }
+
     private boolean excludeTest(Resource resource) throws IOException {
         return resource.getFile().getPath().contains("/target/test-classes/");
     }
@@ -110,9 +108,8 @@ public class ClasspathScanner {
         if (CollectionUtils.isEmpty(this.interfaceSet)) {
             return true;
         }
-        Set<Class<?>> classInterfaceSet = ClassUtils.getAllInterfacesForClassAsSet(clazz);
         for (Class<?> c : this.interfaceSet) {
-            if (classInterfaceSet.contains(c)) {
+            if (c.isAssignableFrom(clazz)) {
                 return true;
             }
         }
@@ -129,7 +126,7 @@ public class ClasspathScanner {
         if (this.allSubDirectory) {
             stringBuffer.append("/**");
         }
-        /**
+        /*
          *  SDK*.class
          */
         if (Objects.isNull(this.designation)) {

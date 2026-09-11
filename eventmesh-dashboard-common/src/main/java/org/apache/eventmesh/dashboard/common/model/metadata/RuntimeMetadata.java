@@ -27,6 +27,8 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = false)
 public class RuntimeMetadata extends BaseSyncBase {
 
+    private String name;
+
     private String host;
 
     private Integer port;

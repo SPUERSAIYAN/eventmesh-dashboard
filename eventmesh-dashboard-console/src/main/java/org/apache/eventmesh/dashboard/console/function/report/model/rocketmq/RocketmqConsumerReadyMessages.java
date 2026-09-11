@@ -20,7 +20,7 @@ package org.apache.eventmesh.dashboard.console.function.report.model.rocketmq;
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.console.function.report.ReportViewType;
 import org.apache.eventmesh.dashboard.console.function.report.annotation.ReportMeta;
-import org.apache.eventmesh.dashboard.console.function.report.model.base.not.SubscribeId;
+import org.apache.eventmesh.dashboard.console.function.report.model.base.not.SubscribeId.SubscribeLongValue;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -30,7 +30,7 @@ import lombok.EqualsAndHashCode;
 @ReportMeta(clusterType = ClusterType.STORAGE_ROCKETMQ, reportName = "rocketmq_consumer_ready_messages",
     defaultViewType = ReportViewType.GAUGE, tableName = "rocketmq_consumer_ready_messages",
     comment = "已就绪消息量")
-public class RocketmqConsumerReadyMessages extends SubscribeId {
+public class RocketmqConsumerReadyMessages extends SubscribeLongValue {
 
 
 }

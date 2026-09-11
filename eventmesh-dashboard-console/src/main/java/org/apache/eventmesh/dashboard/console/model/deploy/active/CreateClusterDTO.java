@@ -17,6 +17,7 @@
 
 package org.apache.eventmesh.dashboard.console.model.deploy.active;
 
+import org.apache.eventmesh.dashboard.common.enums.ClusterOwnType;
 import org.apache.eventmesh.dashboard.common.enums.ClusterTrusteeshipType;
 import org.apache.eventmesh.dashboard.common.enums.ClusterTrusteeshipType.FirstToWhom;
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
@@ -42,6 +43,9 @@ public class CreateClusterDTO extends ClusterIdDTO {
 
     @NotNull
     private String description;
+
+    @NotNull
+    private ClusterOwnType clusterOwnType;
 
     private FirstToWhom firstToWhom = FirstToWhom.DASHBOARD;
 

@@ -20,6 +20,8 @@ package org.apache.eventmesh.dashboard.common.model.remoting;
 
 public enum RemotingActionType {
 
+    EXISTENCE,
+
     ADD,
 
     UPDATE,

@@ -45,6 +45,9 @@ import lombok.Getter;
  */
 public enum DeployStatusType {
 
+    /**
+     *
+     */
     SETTLE,
 
 
@@ -53,8 +56,14 @@ public enum DeployStatusType {
         build_success 状态 下一个是  CREATE_WAIT
         """),
 
+    /**
+     * 资源申请中
+     */
     RESOURCE_APPLY,
 
+    /**
+     * 资源申请失败
+     */
     RESOURCE_APPLY_FAILED,
 
     CREATE,

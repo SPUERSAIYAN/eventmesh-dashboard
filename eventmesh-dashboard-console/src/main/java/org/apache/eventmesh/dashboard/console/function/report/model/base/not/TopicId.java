@@ -17,12 +17,15 @@
 
 package org.apache.eventmesh.dashboard.console.function.report.model.base.not;
 
+
 import org.apache.eventmesh.dashboard.console.function.report.model.base.RuntimeId;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+
 @Data
+@EqualsAndHashCode(callSuper = true)
 public class TopicId extends RuntimeId {
 
 

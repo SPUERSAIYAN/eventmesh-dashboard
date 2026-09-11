@@ -19,6 +19,7 @@
 package org.apache.eventmesh.dashboard.core.remoting.jvm.runtime;
 
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.model.metadata.ClientMetadata;
 import org.apache.eventmesh.dashboard.service.remoting.ClientRemotingService;
 
@@ -30,5 +31,10 @@ public class JvmClientRemotingService extends AbstractJvmRemotingService impleme
     @Override
     public List<ClientMetadata> getClientList() {
         return null;
+    }
+
+    @Override
+    protected MetadataType metadataType() {
+        return MetadataType.CLIENT;
     }
 }

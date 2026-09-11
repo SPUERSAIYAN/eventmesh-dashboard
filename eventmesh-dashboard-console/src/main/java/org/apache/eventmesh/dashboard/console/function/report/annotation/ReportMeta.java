@@ -28,6 +28,7 @@ import java.lang.annotation.Target;
 
 /**
  * id 为 tag time 为 time value 开头为 数据
+ * 
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)

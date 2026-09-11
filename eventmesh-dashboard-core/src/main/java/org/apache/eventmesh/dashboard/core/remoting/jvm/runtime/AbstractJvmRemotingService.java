@@ -20,11 +20,12 @@ package org.apache.eventmesh.dashboard.core.remoting.jvm.runtime;
 
 import org.apache.eventmesh.dashboard.common.annotation.RemotingServiceMapper;
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
-import org.apache.eventmesh.dashboard.core.remoting.AbstractRemotingService;
+import org.apache.eventmesh.dashboard.core.remoting.jvm.AbstractJvmService;
+
 
 @RemotingServiceMapper(clusterType = {ClusterType.STORAGE_JVM_BROKER, ClusterType.STORAGE_JVM_META,
     ClusterType.EVENTMESH_JVM_RUNTIME, ClusterType.EVENTMESH_JVM_RUNTIME})
-public abstract class AbstractJvmRemotingService extends AbstractRemotingService<Object> {
+public abstract class AbstractJvmRemotingService extends AbstractJvmService<Object> {
 
 
 }

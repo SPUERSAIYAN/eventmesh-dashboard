@@ -47,8 +47,17 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * MetadataHandler。 读写行为 每个 runtime or cluster 。所有 MetadataType 的 MetadataHandler 已经关系 从 runtime（Cluster） -> 读 -> createDataMetadataHandler 缓存 -> 定时写
- * 从 db 定时读  发动  -> SyncMetadataCreateFactory -> createDataMetadataHandler 获得 runtime 或则 cluster 维度数据，在写入 runtime 1000个节点，进行一千次db操作， db直接费了。
+ * <pre>
+ *      MetadataHandler。 读写行为 每个 runtime or cluster 。
+ *      所有 MetadataType 的 MetadataHandler 已经关系 从 runtime（Cluster）
+ *          -> 读
+ *          -> createDataMetadataHandler 缓存
+ *          -> 定时写
+ *      从 db 定时读  发动
+ *          -> SyncMetadataCreateFactory
+ *          -> createDataMetadataHandler 获得 runtime 或则 cluster 维度数据，
+ *              在写入 runtime 1000个节点，进行一千次db操作， db直接费了。
+ * </pre>
  */
 @Slf4j
 public class SyncMetadataCreateFactory {

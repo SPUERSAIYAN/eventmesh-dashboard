@@ -17,6 +17,8 @@
 
 package org.apache.eventmesh.dashboard.console.function.report;
 
+import org.apache.eventmesh.dashboard.console.function.report.ReportConfig.ReportEngineConfig;
+
 import org.apache.ibatis.mapping.BoundSql;
 import org.apache.ibatis.mapping.SqlSource;
 import org.apache.ibatis.scripting.xmltags.XMLLanguageDriver;
@@ -25,11 +27,25 @@ import org.apache.ibatis.session.Configuration;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.junit.Before;
 import org.junit.Test;
 
 public class ReportHandlerManageTest {
 
     Configuration configuration = new Configuration();
+
+    private ReportHandlerManage reportHandlerManage = new ReportHandlerManage();
+
+    @Before
+    public void init() {
+        ReportConfig reportConfig = new ReportConfig();
+        ReportEngineConfig reportEngineConfig = new ReportEngineConfig();
+        reportEngineConfig.setEngineAddress("127.0.0.1:6667");
+        reportEngineConfig.setEngineType("iotdb");
+        reportConfig.setDefaultConfig(reportEngineConfig);
+        reportHandlerManage.setReportConfig(reportConfig);
+        reportHandlerManage.init();
+    }
 
     @Test
     public void test() {

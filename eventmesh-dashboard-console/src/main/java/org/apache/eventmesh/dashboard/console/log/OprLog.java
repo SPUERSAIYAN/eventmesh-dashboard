@@ -26,7 +26,9 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -44,11 +46,14 @@ import org.springframework.util.ClassUtils;
 //@Service
 public class OprLog implements Ordered, ApplicationContextAware {
 
-    private int order = LOWEST_PRECEDENCE - 1000; // Specify the order of execution
+    // Specify the order of execution
+    private final int order = LOWEST_PRECEDENCE - 1000;
 
     private LogService logService;
 
     private AbstractApplicationContext applicationContext;
+
+    private Map<ProceedingJoinPoint, Boolean> proceedingJoinPointBooleanMap = new ConcurrentHashMap<>();
 
 
     @Pointcut("within(org.apache.eventmesh.dashboard.console.service..*)")
@@ -110,8 +115,7 @@ public class OprLog implements Ordered, ApplicationContextAware {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         Method method = signature.getMethod();
         Method mostSpecificMethod = ClassUtils.getMostSpecificMethod(method, joinPoint.getTarget().getClass());
-        EmLog declaredAnnotation = mostSpecificMethod.getAnnotation(EmLog.class);
-        return declaredAnnotation;
+        return mostSpecificMethod.getAnnotation(EmLog.class);
     }
 
     @Override

@@ -292,7 +292,7 @@ public class ClusterMetadataDomain {
             colonyDO.getClusterDO().getRuntimeMap().forEach((key, value) -> {
                 clusterOperationHandler.handler(value.getRuntimeMetadata());
             });
-        } else if (Objects.equals(clusterType, ClusterType.EVENTMESH_CLUSTER)) {
+        } else if (Objects.equals(clusterType, ClusterType.EVENTMESH_CLUSTER) || Objects.equals(clusterType, ClusterType.EVENTMESH_JVM_CLUSTER)) {
             colonyDO.getRuntimeColonyDOMap().forEach((key, value) -> {
                 value.getClusterDO().getRuntimeMap().forEach((k, v) -> {
                     clusterOperationHandler.handler(v.getRuntimeMetadata());

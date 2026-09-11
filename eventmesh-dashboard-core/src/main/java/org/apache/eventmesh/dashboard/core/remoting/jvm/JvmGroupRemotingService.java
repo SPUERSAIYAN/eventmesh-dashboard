@@ -19,6 +19,7 @@
 package org.apache.eventmesh.dashboard.core.remoting.jvm;
 
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.model.remoting.BaseGlobalResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.Global2Request;
 import org.apache.eventmesh.dashboard.common.model.remoting.group.GetGroupResult;
@@ -36,5 +37,10 @@ public class JvmGroupRemotingService extends AbstractJvmRemotingService implemen
     @Override
     public BaseGlobalResult deleteGroup(Global2Request global2Request) {
         return null;
+    }
+
+    @Override
+    protected MetadataType metadataType() {
+        return MetadataType.GROUP;
     }
 }

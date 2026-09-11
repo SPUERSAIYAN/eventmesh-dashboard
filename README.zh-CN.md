@@ -100,7 +100,6 @@ docker run -d --name eventmesh-dashboard -p 8080:8080 yourname/eventmesh-dashboa
     3. 下载地址： https://skywalking.apache.org/downloads/
 
 ### 提交代码前
-
 在项目根目录执行下面命令
 
 ```

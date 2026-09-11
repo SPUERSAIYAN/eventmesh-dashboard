@@ -42,7 +42,6 @@ public class ClusterRelationshipController {
     @PostMapping("addClusterRelationshipEntry")
     public void addClusterRelationshipEntry(@RequestBody ClusterRelationshipEntity clusterRelationshipEntity) {
         this.clusterRelationshipService.addClusterRelationshipEntry(clusterRelationshipEntity);
-
     }
 
     @Deprecated

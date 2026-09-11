@@ -35,6 +35,9 @@ public abstract class AbstractClientInfo<T> {
     @Setter
     private Executor executor;
 
+    @Setter
+    protected BaseSyncBase baseSyncBase;
+
     @SuppressWarnings("unchecked")
     public T getClient() {
         return (T) this.clientWrapper.getClientMap().get(this.getSdkTypeEnum());

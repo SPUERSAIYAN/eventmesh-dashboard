@@ -46,6 +46,7 @@ public class RelationshipHandler implements UpdateHandler<ClusterRelationshipEnt
     /**
      * TODO 如果是 替换关联，应该怎么做？</p>
      *       kafka 的集群，接触，在关联上，时两个步骤，那么是两次，可以做到成一次
+     *       zookepper 节点， zookepper所有节点，重启，同时重启所有的 kafka broker，以及 eventmesh rurntime
      */
     @Override
     public void handler(ClusterRelationshipEntity clusterRelationshipEntity) {

@@ -18,6 +18,7 @@
 
 package org.apache.eventmesh.dashboard.core.remoting.jvm.runtime;
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.model.remoting.BaseGlobalResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.config.AddConfigRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.config.GetConfigRequest;
@@ -41,5 +42,10 @@ public class JvmConfigRemotingService extends AbstractJvmRemotingService impleme
     @Override
     public GetTopicsResult getAllTopics(GetTopics2Request getTopicsRequest) {
         return null;
+    }
+
+    @Override
+    protected MetadataType metadataType() {
+        return MetadataType.CONFIG;
     }
 }

@@ -19,6 +19,7 @@
 package org.apache.eventmesh.dashboard.core.remoting.jvm.runtime;
 
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.model.remoting.subscription.GetSubscriptionRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.subscription.GetSubscriptionResult;
 import org.apache.eventmesh.dashboard.service.remoting.GroupMemberRemotingService;
@@ -29,5 +30,10 @@ public class JvmGroupMemberRemotingService extends AbstractJvmRemotingService im
     @Override
     public GetSubscriptionResult getSubscription(GetSubscriptionRequest request) {
         return null;
+    }
+
+    @Override
+    protected MetadataType metadataType() {
+        return MetadataType.GROUP_MEMBER;
     }
 }

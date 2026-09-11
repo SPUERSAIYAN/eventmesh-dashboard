@@ -18,6 +18,7 @@
 
 package org.apache.eventmesh.dashboard.core.remoting.jvm;
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.CreateAclRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.CreateAclResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.DeleteAclRequest;
@@ -43,6 +44,12 @@ public class JvmAclRemotingService extends AbstractJvmRemotingService implements
 
     @Override
     public GetAclsResult getAllAcls(GetAcls2Request getAclsRequest) {
+        this.getMockDatabaseData();
         return null;
+    }
+
+    @Override
+    protected MetadataType metadataType() {
+        return MetadataType.ACL;
     }
 }

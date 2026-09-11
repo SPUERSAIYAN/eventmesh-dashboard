@@ -20,7 +20,6 @@ package org.apache.eventmesh.dashboard.console.function.health.check.impl.storag
 
 import org.apache.eventmesh.dashboard.console.function.health.callback.HealthCheckCallback;
 import org.apache.eventmesh.dashboard.console.function.health.check.AbstractHealthCheckService;
-import org.apache.eventmesh.dashboard.core.function.SDK.config.CreateRocketmqConfig;
 import org.apache.eventmesh.dashboard.core.function.SDK.operation.rocketmq.RocketMQRemotingSDKOperation.DefaultRemotingClient;
 
 import org.apache.rocketmq.remoting.InvokeCallback;
@@ -32,9 +31,6 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class Rocketmq4BrokerCheck extends AbstractHealthCheckService<DefaultRemotingClient> {
-
-    private CreateRocketmqConfig config;
-
 
     @Override
     public void doCheck(HealthCheckCallback callback) throws Exception {

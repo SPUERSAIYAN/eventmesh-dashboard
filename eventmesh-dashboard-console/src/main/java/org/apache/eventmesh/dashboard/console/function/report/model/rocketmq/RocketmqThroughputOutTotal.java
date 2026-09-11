@@ -20,7 +20,7 @@ package org.apache.eventmesh.dashboard.console.function.report.model.rocketmq;
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.console.function.report.ReportViewType;
 import org.apache.eventmesh.dashboard.console.function.report.annotation.ReportMeta;
-import org.apache.eventmesh.dashboard.console.function.report.model.base.not.SubscribeId.LongValue;
+import org.apache.eventmesh.dashboard.console.function.report.model.base.not.SubscribeId.SubscribeLongValue;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -30,6 +30,6 @@ import lombok.EqualsAndHashCode;
 @ReportMeta(clusterType = ClusterType.STORAGE_ROCKETMQ, reportName = "rocketmq_throughput_out_total",
     defaultViewType = ReportViewType.COUNTER, tableName = "rocketmq_throughput_out_total",
     comment = "消息消费从服务端流出的吞吐量")
-public class RocketmqThroughputOutTotal extends LongValue {
+public class RocketmqThroughputOutTotal extends SubscribeLongValue {
 
 }

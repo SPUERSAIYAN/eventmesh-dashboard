@@ -27,6 +27,6 @@ public enum CollectType {
      */
     PROMETHEUS,
 
-    EVENTMESH;
+    EVENTMESH,
 
 }

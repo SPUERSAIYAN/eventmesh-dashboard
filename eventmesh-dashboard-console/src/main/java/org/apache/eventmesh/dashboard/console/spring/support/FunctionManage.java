@@ -35,10 +35,13 @@ import org.apache.eventmesh.dashboard.console.spring.support.metadata.DatabaseAn
 import org.apache.eventmesh.dashboard.console.spring.support.metadata.DefaultMetadataSyncResultHandler;
 import org.apache.eventmesh.dashboard.core.metadata.DataMetadataHandler;
 import org.apache.eventmesh.dashboard.core.metadata.MetadataSyncManage;
+import org.apache.eventmesh.dashboard.core.remoting.Remoting2Manage;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import javax.annotation.PostConstruct;
 
@@ -84,17 +87,25 @@ public class FunctionManage {
     private DefaultMetadataSyncResultHandler defaultMetadataSyncResultHandler;
     @Autowired
     private HealthDataService dataService;
+    @SuppressWarnings("rawtypes")
     @Autowired
     private List<DataMetadataHandler> dataMetadataHandlerList;
 
+    @Autowired
+    private DBRemotingResultHook dbRemotingResultHook;
+
     @Value("${function.enabled:false}")
     private boolean enabled;
+
+    {
+        this.initQueueData();
+    }
 
     @Bean
     public ReportHandlerManage buildReportHandlerManage() {
         ReportHandlerManage reportHandlerManage = new ReportHandlerManage();
         reportHandlerManage.setReportConfig(functionConfig.getReportConfig());
-        reportHandlerManage.setEnable(enabled);
+        reportHandlerManage.setEnable(functionConfig.isEnabledReport());
         reportHandlerManage.init();
         return reportHandlerManage;
     }
@@ -102,48 +113,6 @@ public class FunctionManage {
     @Bean
     public AddressManage buildAddressManage() {
         return new AddressManage();
-    }
-
-    @PostConstruct
-    private void init() {
-        if (!this.enabled) {
-            return;
-        }
-        this.clusterMetadataDomain.rootClusterDHO();
-        this.initQueueData();
-        this.createHandler();
-        this.buildMetadataSyncManage();
-
-        healthService.setDataService(dataService);
-    }
-
-    private void initQueueData() {
-        LocalDateTime date = LocalDateTime.of(2000, 1, 1, 0, 0, 0, 0);
-        runtimeEntity.setUpdateTime(date);
-        clusterEntity.setUpdateTime(date);
-        clusterRelationshipEntity.setUpdateTime(date);
-    }
-
-    private void buildMetadataSyncManage() {
-        List<DatabaseAndMetadataMapper> databaseAndMetadataMapperList = new ArrayList<>();
-        for (DatabaseAndMetadataType databaseAndMetadataType : DatabaseAndMetadataType.values()) {
-            databaseAndMetadataMapperList.add(databaseAndMetadataType.getDatabaseAndMetadataMapper());
-        }
-        this.metadataSyncManage.setMetadataSyncResultHandler(this.defaultMetadataSyncResultHandler);
-        this.metadataSyncManage.setDataMetadataHandlerList((List<DataMetadataHandler<Object>>) ((Object) this.dataMetadataHandlerList));
-        this.metadataSyncManage.setColonyDO(this.clusterMetadataDomain.getColonyDO());
-
-        this.metadataSyncManage.init(1000, 50, databaseAndMetadataMapperList);
-    }
-
-    /**
-     * TODO 核心逻辑在这里
-     */
-    private void createHandler() {
-        DefaultDataHandler defaultDataHandler = new DefaultDataHandler();
-        defaultDataHandler.setHealthService(healthService);
-        defaultDataHandler.setMetadataSyncManage(metadataSyncManage);
-        this.clusterMetadataDomain.setHandler(defaultDataHandler);
     }
 
     @Bean
@@ -156,9 +125,9 @@ public class FunctionManage {
      * <p>
      * 然后 然后日常
      */
-    @Scheduled(initialDelay = 1500, fixedDelay = 5000)
+    @Scheduled(initialDelayString = "${function.health.initialDelay}", fixedDelayString = "${function.health.fixedDelay}")
     public void health() {
-        if (!this.enabled) {
+        if (!this.functionConfig.isEnabledHealth()) {
             return;
         }
         healthService.executeAll();
@@ -168,9 +137,9 @@ public class FunctionManage {
     /**
      * 需要一个日志打印管理模块
      */
-    @Scheduled(initialDelay = 500L, fixedDelay = 100000)
+    @Scheduled(initialDelayString = "${function.sync.initialDelay}", fixedDelayString = "${function.sync.fixedDelay}")
     public void sync() {
-        if (!this.enabled) {
+        if (!this.functionConfig.isEnabledSync()) {
             return;
         }
         LocalDateTime date = LocalDateTime.now();
@@ -179,7 +148,7 @@ public class FunctionManage {
         List<ClusterRelationshipEntity> clusterRelationshipEntityList =
             this.clusterRelationshipService.queryByUpdateTime(clusterRelationshipEntity);
         if (runtimeEntityList.isEmpty() && clusterEntityList.isEmpty() && clusterRelationshipEntityList.isEmpty()) {
-            //log.info("No runtime entities found");
+            log.debug("No runtime entities found");
             return;
         }
         runtimeEntity.setUpdateTime(date);
@@ -191,6 +160,73 @@ public class FunctionManage {
                 .runtimeEntityList(runtimeEntityList).build();
         this.clusterMetadataDomain.handlerMetadata(metadataAll);
 
+    }
+
+    @PostConstruct
+    private void init() {
+        if (!this.enabled) {
+            return;
+        }
+        Remoting2Manage.getInstance().registerHook(dbRemotingResultHook);
+        this.clusterMetadataDomain.rootClusterDHO();
+        this.createHandler();
+        this.buildMetadataSyncManage();
+
+        healthService.setDataService(dataService);
+        if (this.functionConfig.isMockJvm()) {
+            MockJvmRemotingServiceHandler mockJvmRemotingServiceHandler = new MockJvmRemotingServiceHandler();
+            mockJvmRemotingServiceHandler.setSyncMetadataCreateFactoryMap(metadataSyncManage.getSyncMetadataCreateFactoryMap());
+            Remoting2Manage.getInstance().registerServiceHandler(mockJvmRemotingServiceHandler);
+        }
+    }
+
+    private void initQueueData() {
+        LocalDateTime date = LocalDateTime.of(2000, 1, 1, 0, 0, 0, 0);
+        runtimeEntity.setUpdateTime(date);
+        clusterEntity.setUpdateTime(date);
+        clusterRelationshipEntity.setUpdateTime(date);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void buildMetadataSyncManage() {
+        List<DataMetadataHandler<Object>> dataMetadataHandlerList;
+        List<DatabaseAndMetadataMapper> databaseAndMetadataMapperList = new ArrayList<>();
+        if (!this.functionConfig.getIncludeSyncType().isEmpty()) {
+            Set<Class<?>> handlerSet = new HashSet<>();
+            for (DatabaseAndMetadataType databaseAndMetadataType : DatabaseAndMetadataType.values()) {
+                DatabaseAndMetadataMapper databaseAndMetadataMapper = databaseAndMetadataType.getDatabaseAndMetadataMapper();
+                if (!this.functionConfig.getIncludeSyncType().contains(databaseAndMetadataMapper.getMetaType())) {
+                    continue;
+                }
+                databaseAndMetadataMapperList.add(databaseAndMetadataMapper);
+                handlerSet.add(databaseAndMetadataMapper.getMetadataHandlerClass());
+            }
+            dataMetadataHandlerList = new ArrayList<>();
+            for (DataMetadataHandler dataMetadataHandler : this.dataMetadataHandlerList) {
+                if (handlerSet.contains(dataMetadataHandler.getClass())) {
+                    continue;
+                }
+                dataMetadataHandlerList.add((DataMetadataHandler<Object>) dataMetadataHandler);
+            }
+        } else {
+            dataMetadataHandlerList = (List<DataMetadataHandler<Object>>) ((Object) this.dataMetadataHandlerList);
+        }
+
+        this.metadataSyncManage.setMetadataSyncResultHandler(this.defaultMetadataSyncResultHandler);
+        this.metadataSyncManage.setDataMetadataHandlerList(dataMetadataHandlerList);
+        this.metadataSyncManage.setColonyDO(this.clusterMetadataDomain.getColonyDO());
+
+        this.metadataSyncManage.init(1000, 5000, databaseAndMetadataMapperList);
+    }
+
+    /**
+     * TODO 核心逻辑在这里
+     */
+    private void createHandler() {
+        DefaultDataHandler defaultDataHandler = new DefaultDataHandler();
+        defaultDataHandler.setHealthService(healthService);
+        defaultDataHandler.setMetadataSyncManage(metadataSyncManage);
+        this.clusterMetadataDomain.setHandler(defaultDataHandler);
     }
 
 

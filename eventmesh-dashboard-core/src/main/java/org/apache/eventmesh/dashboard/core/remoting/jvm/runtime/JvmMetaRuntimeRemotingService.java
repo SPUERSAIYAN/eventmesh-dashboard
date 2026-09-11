@@ -17,6 +17,7 @@
 
 package org.apache.eventmesh.dashboard.core.remoting.jvm.runtime;
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.model.metadata.RuntimeMetadata;
 import org.apache.eventmesh.dashboard.common.model.remoting.GlobalResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.runtime.GetRuntime2Request;
@@ -28,5 +29,10 @@ public class JvmMetaRuntimeRemotingService extends AbstractJvmRemotingService im
     public GlobalResult<RuntimeMetadata> getRuntime(GetRuntime2Request getRuntimeRequest) {
 
         return this.createSuccessGlobalResult(null);
+    }
+
+    @Override
+    protected MetadataType metadataType() {
+        return MetadataType.RUNTIME;
     }
 }

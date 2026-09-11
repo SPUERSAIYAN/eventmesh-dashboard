@@ -11,25 +11,25 @@
 3. offset
 4. k8s
     1. 集群
-        2. 创建
-        3.
+        1. 创建
+        2. 
     2. 节点
-        3. 创建
-        4. 停用
-        5. 删除
-    2. console ， docker 执行脚本
-    2. console 与 操作分开
-    3. 6c 16G
-    4. eventmesh
-    5. kafka
+        1. 创建
+        2. 停用
+        3. 删除
+    3. console ， docker 执行脚本
+    4. console 与 操作分开
+    5. 6c 16G
+    6. eventmesh
+    7. kafka
         1. 取舍问题
-    6. rocketmq
+    8. rocketmq
         1. 简单
         2. 不做难得
         3. 两个集群
             1. 单节点
             2. 一主已从
-    7. pulsuer
+    9. pulsuer
         1. 我有
 5. 数据采集快
     1. 存储已经支持的采集

@@ -142,11 +142,6 @@ public class ClusterController {
             ClusterControllerMapper.INSTANCE.queryRelationClusterByClusterIdAndType(dto));
     }
 
-
-    public void updateClusterNode() {
-
-    }
-
     /**
      * TODO
      *  多端口，怎么处理。
@@ -160,7 +155,7 @@ public class ClusterController {
      *  eventmesh 是否可以从 meta 读取 runtime 信息  or 从 runtime 读取 meta
      *  其他基础数据，怎么处理。
      * </p>
-     * 适合 meta 与 runtime 弱关联的 架构。比如 eventmesh
+     * 适合 meta 与 runtime 弱关联的 架构。比如 eventmeshw
      */
     @PostMapping("createClusterByFullAddress")
     public void createClusterByFullAddress(@RequestBody @Validated CreateClusterByFullAddressDTO data) {

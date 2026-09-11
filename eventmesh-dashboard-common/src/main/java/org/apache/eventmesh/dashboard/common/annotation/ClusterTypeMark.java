@@ -30,6 +30,6 @@ import java.lang.annotation.Target;
 @Documented
 public @interface ClusterTypeMark {
 
-    ClusterType clusterType();
+    ClusterType[] clusterType();
 
 }

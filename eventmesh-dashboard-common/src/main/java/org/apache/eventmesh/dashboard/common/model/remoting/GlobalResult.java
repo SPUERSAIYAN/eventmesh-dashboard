@@ -40,6 +40,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class GlobalResult<T> {
 
+
     private Integer code;
 
     private String message;

@@ -20,7 +20,7 @@ package org.apache.eventmesh.dashboard.console.model.message.offset;
 
 
 import org.apache.eventmesh.dashboard.common.enums.OperationRange.OperationRangeType;
-import org.apache.eventmesh.dashboard.common.enums.ResetOffsetMode;
+import org.apache.eventmesh.dashboard.common.enums.message.ResetOffsetMode;
 import org.apache.eventmesh.dashboard.console.model.ClusterIdDTO;
 
 import java.time.LocalDateTime;

@@ -25,10 +25,13 @@ import lombok.EqualsAndHashCode;
 
 /**
  *
+ * 
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class RuntimeEntity extends BaseSyncEntity {
+
+    private String name;
 
     private String host;
 

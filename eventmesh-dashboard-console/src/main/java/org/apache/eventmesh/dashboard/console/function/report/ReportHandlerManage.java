@@ -51,7 +51,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.base.CaseFormat;
 
@@ -82,6 +84,8 @@ import lombok.extern.slf4j.Slf4j;
  * 8. 支持批量获得，两个获得
  *  1. 批量与单个是否共用一个 接口？
  *  2. 如果同时支持批量与单个，那么 前端需要提供连个
+ *
+ * 
  */
 @Slf4j
 public class ReportHandlerManage {
@@ -92,17 +96,28 @@ public class ReportHandlerManage {
         engineClasses.put("iotdb", IotDBReportEngine.class);
     }
 
-    private final ScheduledExecutorService scheduledExecutorService = new ScheduledThreadPoolExecutor(10);
+    private final ScheduledExecutorService scheduledExecutorService = new ScheduledThreadPoolExecutor(4, new ThreadFactory() {
+        private AtomicInteger index = new AtomicInteger();
+
+        @Override
+        public Thread newThread(Runnable r) {
+            return new Thread(r, "collect-scheduled-thread-" + index.incrementAndGet());
+        }
+    });
+
     private final Map<Class<?>, String> clazzToTableName = new HashMap<>();
+
     private final CollectManage collectManage = new CollectManage();
+
     private final MetadataDataManage metadataDataManage = new MetadataDataManage();
-    private Map<String, ReportEngine> reportEngineMap = new HashMap<>();
+
+    private final Map<String, ReportEngine> reportEngineMap = new HashMap<>();
+    @Getter
+    private final Map<String, ReportMetaData> reportMetaDataMap = new HashMap<>();
+    @Getter
+    private final Map<String, ReportMetaData> aggregationMetaDataMap = new HashMap<>();
     @Setter
     private ReportEngine reportEngine;
-    @Getter
-    private Map<String, ReportMetaData> reportMetaDataMap = new HashMap<>();
-    @Getter
-    private Map<String, ReportMetaData> aggregationMetaDataMap = new HashMap<>();
     @Setter
     private ReportConfig reportConfig;
 
@@ -122,18 +137,42 @@ public class ReportHandlerManage {
         if (!this.enable) {
             return;
         }
+        this.collectManage.setReportHandlerManage(this);
+        this.collectManage.init();
 
-        this.metadataDataManage.init(this.reportConfig.getUrl(), this.reportConfig.getUsername(), this.reportConfig.getPassword());
-        scheduledExecutorService.scheduleAtFixedRate(this.collectManage::request, 5, 5, TimeUnit.SECONDS);
-
-        scheduledExecutorService.scheduleAtFixedRate(this::handlerData, 5, 5, TimeUnit.SECONDS);
-
-        scheduledExecutorService.scheduleAtFixedRate(this.metadataDataManage::syncData, 5, 100, TimeUnit.MINUTES);
+        //this.metadataDataManage.init(this.reportConfig.getUrl(), this.reportConfig.getUsername(), this.reportConfig.getPassword());
+        scheduledExecutorService.scheduleAtFixedRate(this.collectManage::collect, 5, 5, TimeUnit.SECONDS);
+        scheduledExecutorService.scheduleAtFixedRate(this.collectManage::syncData, 5, 100, TimeUnit.MINUTES);
 
         this.buildDeleteDataTask();
         this.ddlHandler();
     }
 
+    public Map<String, List<Map<String, Object>>> queryResultIsMap(List<SingleGeneralReportDO> singleGeneralReportDOList) {
+        Map<String, CompletableFuture<List<Map<String, Object>>>> completableFutures = new HashMap<>(singleGeneralReportDOList.size());
+        singleGeneralReportDOList.forEach(reportDO -> {
+            CompletableFuture<List<Map<String, Object>>> completableFuture = reportEngine.query(reportDO);
+            completableFutures.put(reportDO.getReportType(), completableFuture);
+        });
+        Map<String, List<Map<String, Object>>> resultMap = new HashMap<>(singleGeneralReportDOList.size());
+        completableFutures.forEach((key, completableFuture) -> {
+            try {
+                List<Map<String, Object>> singleData = completableFuture.get();
+                resultMap.put(key, singleData);
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        return resultMap;
+    }
+
+    /**
+     * 定时删除数据
+     * <pre>
+     *      时序数据库，内部都支持删除数据
+     *      es，os，等检索数据不支持
+     *  </pre>
+     */
     private void buildDeleteDataTask() {
         LocalDate current = LocalDate.now().plusDays(1);
         LocalDateTime nextTime = LocalDateTime.of(current, LocalTime.of(3, 0));
@@ -162,6 +201,7 @@ public class ReportHandlerManage {
         this.reportConfig.getReportEngineConfigList().forEach(this::createEngine);
     }
 
+    @SuppressWarnings({"AliDeprecation", "deprecation"})
     private AbstractReportEngine createEngine(ReportEngineConfig reportEngineConfig) {
         if (Objects.isNull(reportEngineConfig)) {
             return null;
@@ -170,7 +210,9 @@ public class ReportHandlerManage {
         try {
             AbstractReportEngine reportEngine = (AbstractReportEngine) clazz.newInstance();
             reportEngine.setReportEngineConfig(reportEngineConfig);
+            reportEngine.setClazzToTableName(this.clazzToTableName);
             reportEngineMap.put(reportEngineConfig.getName(), reportEngine);
+            reportEngine.init();
             return reportEngine;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -188,7 +230,9 @@ public class ReportHandlerManage {
 
     /**
      * 后期再支持多存储与多数据
+     * TODO 重构了 同步机制 ， handlerData 没作用，把 handler 抽离到 DataSyncHandler 里面
      */
+    @Deprecated
     private void handlerData() {
         List<Time> timeData = this.collectManage.getData();
         if (CollectionUtils.isEmpty(timeData)) {
@@ -212,7 +256,6 @@ public class ReportHandlerManage {
         if (Objects.isNull(reportMeta)) {
             return;
         }
-
         String className = clazz.getSimpleName();
         String caseName = CaseFormat.LOWER_CAMEL.to(com.google.common.base.CaseFormat.LOWER_UNDERSCORE, className);
         ReportMetaData reportMetaData = new ReportMetaData();
@@ -249,24 +292,5 @@ public class ReportHandlerManage {
         this.reportMetaDataMap.put(reportMetaData.getReportName(), reportMetaData);
         this.clazzToTableName.put(clazz, reportMetaData.getTableName());
     }
-
-    public Map<String, List<Map<String, Object>>> queryResultIsMap(List<SingleGeneralReportDO> singleGeneralReportDOList) {
-        Map<String, CompletableFuture<List<Map<String, Object>>>> completableFutures = new HashMap<>(singleGeneralReportDOList.size());
-        singleGeneralReportDOList.forEach(reportDO -> {
-            CompletableFuture<List<Map<String, Object>>> completableFuture = reportEngine.query(reportDO);
-            completableFutures.put(reportDO.getReportType(), completableFuture);
-        });
-        Map<String, List<Map<String, Object>>> resultMap = new HashMap<>(singleGeneralReportDOList.size());
-        completableFutures.forEach((key, completableFuture) -> {
-            try {
-                List<Map<String, Object>> singleData = completableFuture.get();
-                resultMap.put(key, singleData);
-            } catch (InterruptedException | ExecutionException e) {
-                throw new RuntimeException(e);
-            }
-        });
-        return resultMap;
-    }
-
 
 }

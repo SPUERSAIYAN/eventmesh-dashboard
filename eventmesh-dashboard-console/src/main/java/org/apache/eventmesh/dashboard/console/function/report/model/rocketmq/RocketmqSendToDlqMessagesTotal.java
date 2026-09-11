@@ -20,11 +20,11 @@ package org.apache.eventmesh.dashboard.console.function.report.model.rocketmq;
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.console.function.report.ReportViewType;
 import org.apache.eventmesh.dashboard.console.function.report.annotation.ReportMeta;
-import org.apache.eventmesh.dashboard.console.function.report.model.base.not.SubscribeId.LongValue;
+import org.apache.eventmesh.dashboard.console.function.report.model.base.not.SubscribeId.SubscribeLongValue;
 
 @ReportMeta(clusterType = ClusterType.STORAGE_ROCKETMQ, reportName = "rocketmq_send_to_dlq_messages_total",
     defaultViewType = ReportViewType.COUNTER, tableName = "rocketmq_send_to_dlq_messages_total",
     comment = "处理中消息量")
-public class RocketmqSendToDlqMessagesTotal extends LongValue {
+public class RocketmqSendToDlqMessagesTotal extends SubscribeLongValue {
 
 }

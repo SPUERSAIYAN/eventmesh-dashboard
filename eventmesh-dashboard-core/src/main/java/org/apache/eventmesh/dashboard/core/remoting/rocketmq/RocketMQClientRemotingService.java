@@ -25,6 +25,7 @@ import java.util.List;
 
 public class RocketMQClientRemotingService extends AbstractRocketMQRemotingService implements ClientRemotingService {
 
+
     @Override
     public List<ClientMetadata> getClientList() {
         return null;

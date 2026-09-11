@@ -112,6 +112,7 @@ public class MetadataSyncWrapper implements Runnable {
             notDifference.setSourceHandler(this.metadataSyncConfig.getClusterService());
             notDifference.setTargetHandler(this.metadataSyncConfig.getDataBasesHandler());
             this.readOnlyDifference = notDifference;
+            log.info("metadata sync readOnly id is {} , type is {}", this.baseSyncBase.getId(), this.baseSyncBase.getClusterType());
         }
 
         this.intervalBaseNumber = this.metadataSyncConfig.getClusterServiceType().isSelf() ? 0 : 1000 * 60 * 10 + new Random().nextInt(1000);
@@ -129,9 +130,11 @@ public class MetadataSyncWrapper implements Runnable {
         if (Objects.equals(this.baseSyncBase.getFirstToWhom(), FirstToWhom.RUNTIME)) {
             firstTimeDifference.setSourceHandler(this.metadataSyncConfig.getClusterService());
             firstTimeDifference.setTargetHandler(this.metadataSyncConfig.getDataBasesHandler());
+            log.info("metadata sync FirstToWhom.RUNTIME id is {} type is {}", this.baseSyncBase.getId(), this.baseSyncBase.getClusterType());
         } else if (Objects.equals(this.baseSyncBase.getFirstToWhom(), FirstToWhom.DASHBOARD)) {
             firstTimeDifference.setSourceHandler(this.metadataSyncConfig.getDataBasesHandler());
             firstTimeDifference.setTargetHandler(this.metadataSyncConfig.getClusterService());
+            log.info("metadata sync FirstToWhom.DASHBOARD id is {} type is {}", this.baseSyncBase.getId(), this.baseSyncBase.getClusterType());
         }
         firstTimeDifference.setAllData(allData);
         this.firstTimeDifference = firstTimeDifference;
@@ -155,7 +158,8 @@ public class MetadataSyncWrapper implements Runnable {
         DataMetadataHandler<BaseClusterIdBase> target =
             !this.metadataSyncConfig.getClusterServiceType().isSelf() ? this.metadataSyncConfig.getDataBasesHandler()
                 : this.metadataSyncConfig.getClusterService();
-
+        log.info("metadata sync self  id is {} , type is {} self is {}  ", this.baseSyncBase.getId(), this.baseSyncBase.getClusterType(),
+            this.metadataSyncConfig.getClusterServiceType().isSelf());
         differences.forEach((diff) -> {
             diff.setSourceHandler(source);
             diff.setTargetHandler(target);
@@ -163,6 +167,8 @@ public class MetadataSyncWrapper implements Runnable {
         });
         // 在 SyncMetadataCreateFactory 的 DataMetadataHandler 不会缓存所有数据。以集群为主的时候需要查询一次
         if (Objects.equals(this.metadataSyncConfig.getClusterServiceType(), ClusterTrusteeshipType.TRUSTEESHIP_FIND_REVERSE)) {
+            log.info("metadata sync ClusterTrusteeshipType.TRUSTEESHIP_FIND_REVERSE id is {} , type is {}   ", this.baseSyncBase.getId(),
+                this.baseSyncBase.getClusterType());
             DataMetadataHandler<BaseClusterIdBase> dataMetadataHandler = new DataMetadataHandler<>() {
                 @Override
                 public void handleAll(Collection<BaseClusterIdBase> allData, List<BaseClusterIdBase> addData, List<BaseClusterIdBase> updateData,

@@ -20,6 +20,7 @@ package org.apache.eventmesh.dashboard.console.function.report.model.base;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class ClusterId extends OrganizationId {
@@ -28,5 +29,22 @@ public class ClusterId extends OrganizationId {
     private Long clustersId;
 
     private String clustersName;
+
+
+    @Data
+    @EqualsAndHashCode(callSuper = true)
+    public static class ClusterLongValue extends ClusterId {
+
+        private Long value;
+
+    }
+
+    @Data
+    @EqualsAndHashCode(callSuper = true)
+    public static class ClusterFloatValue extends ClusterId {
+
+        private Float value;
+
+    }
 
 }

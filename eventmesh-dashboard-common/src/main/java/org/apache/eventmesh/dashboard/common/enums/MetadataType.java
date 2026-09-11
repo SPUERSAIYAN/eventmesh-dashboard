@@ -64,7 +64,7 @@ public enum MetadataType {
 
     ACL(AclMetadata.class);
 
-    private Class<?> metadataClass;
+    private final Class<?> metadataClass;
 
     private boolean readOnly = false;
 

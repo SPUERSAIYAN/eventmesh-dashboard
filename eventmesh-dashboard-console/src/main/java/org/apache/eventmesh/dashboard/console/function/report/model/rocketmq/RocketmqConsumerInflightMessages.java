@@ -21,7 +21,7 @@ package org.apache.eventmesh.dashboard.console.function.report.model.rocketmq;
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.console.function.report.ReportViewType;
 import org.apache.eventmesh.dashboard.console.function.report.annotation.ReportMeta;
-import org.apache.eventmesh.dashboard.console.function.report.model.base.not.SubscribeId.LongValue;
+import org.apache.eventmesh.dashboard.console.function.report.model.base.not.SubscribeId.SubscribeLongValue;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -31,6 +31,6 @@ import lombok.EqualsAndHashCode;
 @ReportMeta(clusterType = ClusterType.STORAGE_ROCKETMQ, reportName = "rocketmq_consumer_inflight_messages",
     defaultViewType = ReportViewType.GAUGE, tableName = "rocketmq_consumer_inflight_messages",
     comment = "处理中消息量")
-public class RocketmqConsumerInflightMessages extends LongValue {
+public class RocketmqConsumerInflightMessages extends SubscribeLongValue {
 
 }

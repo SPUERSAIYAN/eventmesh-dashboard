@@ -20,10 +20,12 @@ package org.apache.eventmesh.dashboard.console.function.report.collect.active;
 import org.apache.eventmesh.dashboard.common.model.metadata.GroupMetadata;
 import org.apache.eventmesh.dashboard.common.model.metadata.TopicMetadata;
 import org.apache.eventmesh.dashboard.console.function.report.collect.active.AbstractCollect.AbstractRuntimeCollect;
+import org.apache.eventmesh.dashboard.console.function.report.model.base.RuntimeId;
 
 import java.util.List;
 
-public abstract class AbstractMetadataCollect<C> extends AbstractRuntimeCollect<C> {
+@Deprecated
+public abstract class AbstractMetadataCollect<C, D extends RuntimeId> extends AbstractRuntimeCollect<C, D> {
 
 
     private List<TopicMetadata> topicMetadataList;
