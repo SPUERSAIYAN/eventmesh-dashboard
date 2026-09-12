@@ -28,6 +28,7 @@ import org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata;
 import org.apache.eventmesh.dashboard.common.model.remoting.AbstractGlobal2Request;
 import org.apache.eventmesh.dashboard.common.model.remoting.GlobalResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.RemotingActionType;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.GetTopicsResponse;
 import org.apache.eventmesh.dashboard.common.util.ClasspathScanner;
 import org.apache.eventmesh.dashboard.core.function.SDK.SDKManage;
 import org.apache.eventmesh.dashboard.core.metadata.DataMetadataHandler;
@@ -38,7 +39,6 @@ import org.apache.commons.lang3.ArrayUtils;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -214,19 +214,25 @@ public class Remoting2Manage {
                         wrapper.remotingServiceType.getSimpleName(),
                         remotingActionType, methodMapper.remotingServiceMethod.getName(), object);
                     if (Objects.equals(RemotingActionType.QUEUE_ALL, remotingActionType)) {
-                        return Collections.EMPTY_LIST;
+                        throw new IllegalStateException("Remote metadata query returned no result");
                     }
                     return null;
                 }
                 if (result.getCode() != 200) {
                     error = true;
                     errorMessage = result.getMessage();
+                    if (Objects.equals(RemotingActionType.QUEUE_ALL, remotingActionType)) {
+                        throw new IllegalStateException("Remote metadata query failed: " + errorMessage);
+                    }
                 }
                 return result.getData();
             } catch (Exception e) {
                 error = true;
                 errorMessage = e.getMessage();
                 log.error(e.getMessage(), e);
+                if (Objects.equals(RemotingActionType.QUEUE_ALL, remotingActionType)) {
+                    throw new IllegalStateException("Cannot read remote metadata", e);
+                }
             } finally {
                 this.finallyFlow(object, error, errorMessage, baseRuntimeIdBase, remotingActionType);
             }
@@ -286,7 +292,11 @@ public class Remoting2Manage {
 
         @Override
         public List<T> getData() {
-            return (List<T>) this.execution(null, RemotingActionType.QUEUE_ALL);
+            Object data = this.execution(null, RemotingActionType.QUEUE_ALL);
+            if (data instanceof GetTopicsResponse response) {
+                return (List<T>) response.getTopicMetadataList();
+            }
+            return (List<T>) data;
 
         }
     }
