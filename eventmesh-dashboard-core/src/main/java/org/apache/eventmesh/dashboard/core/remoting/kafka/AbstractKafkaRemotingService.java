@@ -20,10 +20,38 @@ package org.apache.eventmesh.dashboard.core.remoting.kafka;
 
 import org.apache.eventmesh.dashboard.common.annotation.RemotingServiceMapper;
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
+import org.apache.eventmesh.dashboard.common.model.remoting.BaseGlobalResult;
 import org.apache.eventmesh.dashboard.core.remoting.AbstractRemotingService;
 
 import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.common.KafkaFuture;
+
+import java.util.concurrent.TimeUnit;
 
 @RemotingServiceMapper(clusterType = {ClusterType.STORAGE_KAFKA_BROKER, ClusterType.STORAGE_KAFKA_RAFT})
 public abstract class AbstractKafkaRemotingService extends AbstractRemotingService<AdminClient> {
+
+    protected static final int ADMIN_TIMEOUT_MS = 10000;
+
+    protected <T> T awaitResult(KafkaFuture<T> future) throws Exception {
+        try {
+            return future.get(ADMIN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw e;
+        }
+    }
+
+    protected String requireName(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " is required");
+        }
+        return value;
+    }
+
+    protected BaseGlobalResult successfulResult() {
+        BaseGlobalResult result = new BaseGlobalResult();
+        result.setCode(200);
+        return result;
+    }
 }
