@@ -21,7 +21,6 @@ import org.apache.eventmesh.dashboard.console.entity.function.ConfigEntity;
 import org.apache.eventmesh.dashboard.console.model.function.config.QueryByInstanceIdDTO;
 
 import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
 /**
@@ -33,7 +32,6 @@ public interface ConfigControllerMapper {
     ConfigControllerMapper INSTANCE = Mappers.getMapper(ConfigControllerMapper.class);
 
 
-    @Mapping(source = "configName", target = "name")
     ConfigEntity queryByInstanceId(QueryByInstanceIdDTO queryByInstanceIdDTO);
 
 }

@@ -56,7 +56,7 @@ public class NameMappingTest {
     @Test
     public void topicNameSurvivesDtoAndMetadataConversion() {
         CreateTopicDTO request = new CreateTopicDTO();
-        request.setTopicName("orders");
+        request.setName("orders");
         TopicEntity entity = TopicControllerMapper.INSTANCE.createTopic(request);
         entity.setId(100L);
         entity.setClusterId(10L);
@@ -66,14 +66,14 @@ public class NameMappingTest {
         Assert.assertEquals(Long.valueOf(100L), metadata.getId());
         Assert.assertEquals(Long.valueOf(10L), metadata.getClusterId());
         GetTopicListDTO query = new GetTopicListDTO();
-        query.setTopicName("orders");
+        query.setName("orders");
         Assert.assertEquals("orders", TopicControllerMapper.INSTANCE.queryTopicListByClusterId(query).getName());
     }
 
     @Test
     public void configNameSurvivesDtoAndMetadataConversion() {
         QueryByInstanceIdDTO query = new QueryByInstanceIdDTO();
-        query.setConfigName("namesrvAddr");
+        query.setName("namesrvAddr");
         ConfigEntity entity = ConfigControllerMapper.INSTANCE.queryByInstanceId(query);
         ConfigMetadata metadata = ConfigConvertMetaData.INSTANCE.toMetaData(entity);
         Assert.assertEquals("namesrvAddr", metadata.nodeUnique());
@@ -81,19 +81,22 @@ public class NameMappingTest {
     }
 
     @Test
-    public void entityJsonPreservesExistingHttpNamesAndAcceptsName() throws Exception {
+    public void entityJsonUsesNameOnly() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
-        TopicEntity topic = mapper.readValue("{\"topicName\":\"orders\"}", TopicEntity.class);
+        TopicEntity topic = mapper.readValue("{\"name\":\"orders\"}", TopicEntity.class);
         Assert.assertEquals("orders", topic.getName());
-        Assert.assertEquals("orders", mapper.readTree(mapper.writeValueAsString(topic)).get("topicName").asText());
-        Assert.assertEquals("orders", mapper.readValue("{\"name\":\"orders\"}", TopicEntity.class).getName());
-        ConfigEntity config = mapper.readValue("{\"configName\":\"timeout\"}", ConfigEntity.class);
+        Assert.assertEquals("orders", mapper.valueToTree(topic).get("name").asText());
+        Assert.assertFalse(mapper.valueToTree(topic).has("topicName"));
+        ConfigEntity config = mapper.readValue("{\"name\":\"timeout\"}", ConfigEntity.class);
         Assert.assertEquals("timeout", config.getName());
-        Assert.assertEquals("timeout", mapper.readTree(mapper.writeValueAsString(config)).get("configName").asText());
+        Assert.assertEquals("timeout", mapper.valueToTree(config).get("name").asText());
+        Assert.assertFalse(mapper.valueToTree(config).has("configName"));
+        Assert.assertEquals("orders", mapper.readValue("{\"name\":\"orders\"}", CreateTopicDTO.class).getName());
+        Assert.assertEquals("timeout", mapper.readValue("{\"name\":\"timeout\"}", QueryByInstanceIdDTO.class).getName());
     }
 
     @Test
-    public void batchInsertsBindRenamedProperties() throws Exception {
+    public void batchInsertsBindLegacyPropertiesToName() throws Exception {
         TopicEntity topic = new TopicEntity();
         topic.setName("orders");
         ConfigEntity config = new ConfigEntity();
@@ -121,6 +124,20 @@ public class NameMappingTest {
         }
     }
 
+    @Test
+    public void legacyAccessorsShareTheNameField() {
+        TopicEntity topic = new TopicEntity();
+        topic.setName("orders");
+        Assert.assertEquals("orders", topic.getTopicName());
+        topic.setTopicName("payments");
+        Assert.assertEquals("payments", topic.getName());
+        ConfigEntity config = new ConfigEntity();
+        config.setName("timeout");
+        Assert.assertEquals("timeout", config.getConfigName());
+        config.setConfigName("retries");
+        Assert.assertEquals("retries", config.getName());
+    }
+
     private void assertBatchNameBinding(Class<?> mapper, Object entity, String expected) throws Exception {
         String script = String.join(" ",
             mapper.getMethod("batchInsert", java.util.List.class).getAnnotation(Insert.class).value());
@@ -128,7 +145,7 @@ public class NameMappingTest {
         BoundSql sql = new XMLLanguageDriver().createSqlSource(configuration, script, java.util.Map.class)
             .getBoundSql(Collections.singletonMap("list", Collections.singletonList(entity)));
         String property = sql.getParameterMappings().stream().map(value -> value.getProperty())
-            .filter(value -> value.endsWith(".name")).findFirst().orElseThrow();
+            .filter(value -> value.endsWith(".topicName") || value.endsWith(".configName")).findFirst().orElseThrow();
         Assert.assertEquals(expected, sql.getAdditionalParameter(property));
     }
 }

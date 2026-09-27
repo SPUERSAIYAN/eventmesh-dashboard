@@ -158,7 +158,7 @@ public class TopicServiceImpl implements TopicService {
 
 
     public TopicEntity setSearchCriteria(GetTopicListDTO getTopicListDTO, TopicEntity topicEntity) {
-        topicEntity.setName(getTopicListDTO.getTopicName());
+        topicEntity.setName(getTopicListDTO.getName());
         return topicEntity;
     }
 

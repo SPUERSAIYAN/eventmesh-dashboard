@@ -21,8 +21,7 @@ package org.apache.eventmesh.dashboard.console.entity.function;
 import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.console.entity.base.BaseRuntimeIdEntity;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -46,8 +45,6 @@ public class ConfigEntity extends BaseRuntimeIdEntity {
 
     private String configType;
 
-    @JsonProperty("configName")
-    @JsonAlias("name")
     private String name;
 
     private String configValue;
@@ -78,4 +75,17 @@ public class ConfigEntity extends BaseRuntimeIdEntity {
     public boolean matchVersion(String eventmeshVersion) {
         return true;
     }
+    /**
+     * 保留 MyBatis 原有属性映射，名称只存储在 name 字段中。
+     */
+    @JsonIgnore
+    public String getConfigName() {
+        return this.name;
+    }
+
+    @JsonIgnore
+    public void setConfigName(String name) {
+        this.name = name;
+    }
+
 }
