@@ -18,9 +18,11 @@
 
 package org.apache.eventmesh.dashboard.core.remoting.kafka.mock;
 
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.enums.message.ResetOffsetMode;
 import org.apache.eventmesh.dashboard.common.model.metadata.ConfigMetadata;
 import org.apache.eventmesh.dashboard.common.model.remoting.config.ConfigType;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.DeleteConfigRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.config.GetConfigRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.config.UpdateConfigRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.GetOffsetRequest;
@@ -57,6 +59,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -278,11 +281,13 @@ class KafkaAdminServicesTest {
         }
     }
 
-    /** 配置请求必须明确指定目标范围。 */
+    /** 配置请求拒绝无效或冲突的目标。 */
     @Test
-    @DisplayName("模拟响应：配置请求必须明确指定目标范围")
-    void configRequiresExplicitScopeAndUnambiguousResource() {
+    @DisplayName("模拟响应：配置请求拒绝无效或冲突的目标")
+    void configRejectsInvalidScopeAndAmbiguousResource() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> configs.getConfigs(null));
         GetConfigRequest request = new GetConfigRequest();
+        request.setConfigType(ConfigType.TOPIC);
         Assertions.assertThrows(IllegalArgumentException.class, () -> configs.getConfigs(request));
         request.setConfigType(ConfigType.NODE);
         request.setNode("");
@@ -353,6 +358,113 @@ class KafkaAdminServicesTest {
         request.setIncrementConfig(List.of("invalid"));
         Assertions.assertThrows(IllegalArgumentException.class, () -> configs.updateConfigs(request));
         Mockito.verifyNoInteractions(client);
+    }
+
+    /** 框架只填 Metadata 时仍能定位 Topic、Broker、默认 Broker，实例数据库 ID 不当作 Broker ID。 */
+    @Test
+    @DisplayName("模拟响应：Config 仅凭 Metadata 定位三类资源")
+    @SuppressWarnings("unchecked")
+    void configTargetsComeFromMetadata() throws Exception {
+        Mockito.when(client.incrementalAlterConfigs(Mockito.anyMap(), Mockito.any()).all()).thenReturn(KafkaFuture.completedFuture(null));
+        for (MetadataType type : List.of(MetadataType.TOPIC, MetadataType.RUNTIME, MetadataType.CLUSTER)) {
+            ConfigMetadata entry = configMetadata(type, type == MetadataType.TOPIC ? "topic-a" : type == MetadataType.RUNTIME ? "1" : "");
+
+            UpdateConfigRequest request = new UpdateConfigRequest();
+            request.setMetaData(entry);
+            Mockito.clearInvocations(client);
+            Assertions.assertEquals(200, configs.updateConfigs(request).getCode());
+            ArgumentCaptor<Map<ConfigResource, Collection<AlterConfigOp>>> changes = ArgumentCaptor.forClass(Map.class);
+            Mockito.verify(client).incrementalAlterConfigs(changes.capture(), Mockito.any());
+            ConfigResource resource = new ConfigResource(type == MetadataType.TOPIC ? ConfigResource.Type.TOPIC : ConfigResource.Type.BROKER,
+                entry.getInstanceName());
+            Assertions.assertEquals(Set.of(resource), changes.getValue().keySet());
+        }
+    }
+
+    /** 目标冲突、未解析实例 ID 和不支持的资源类型均在 RPC 前失败。 */
+    @Test
+    @DisplayName("模拟响应：Config 拒绝目标冲突和缺失")
+    void configRejectsConflictingOrUnresolvedTargets() {
+        UpdateConfigRequest request = new UpdateConfigRequest();
+        ConfigMetadata entry = configMetadata(MetadataType.TOPIC, "topic-a");
+        request.setMetaData(entry);
+        request.setNode("1");
+        Assertions.assertThrows(IllegalArgumentException.class, () -> configs.updateConfigs(request));
+        request.setNode(null);
+        entry.setInstanceName(null);
+        entry.setInstanceId(1L);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> configs.updateConfigs(request));
+        entry.setInstanceType(MetadataType.CLUSTER);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> configs.updateConfigs(request));
+        entry.setInstanceType(MetadataType.GROUP);
+        entry.setInstanceName("group-a");
+        Assertions.assertThrows(IllegalArgumentException.class, () -> configs.updateConfigs(request));
+        Mockito.verifyNoInteractions(client);
+    }
+
+    /** DELETE 使用 Kafka 原生删除覆盖操作，不能伪造为设置空字符串。 */
+    @Test
+    @DisplayName("模拟响应：Config DELETE 删除动态覆盖")
+    @SuppressWarnings("unchecked")
+    void configDeleteUsesNativeDeleteOperation() throws Exception {
+        Mockito.when(client.incrementalAlterConfigs(Mockito.anyMap(), Mockito.any()).all()).thenReturn(KafkaFuture.completedFuture(null));
+        DeleteConfigRequest request = new DeleteConfigRequest();
+        request.setMetaData(configMetadata(MetadataType.TOPIC, "topic-a"));
+        request.getMetaData().setConfigValue(null);
+        Mockito.clearInvocations(client);
+        Assertions.assertEquals(200, configs.deleteConfigs(request).getCode());
+        ArgumentCaptor<Map<ConfigResource, Collection<AlterConfigOp>>> changes = ArgumentCaptor.forClass(Map.class);
+        Mockito.verify(client).incrementalAlterConfigs(changes.capture(), Mockito.any());
+        var op = changes.getValue().get(new ConfigResource(ConfigResource.Type.TOPIC, "topic-a")).iterator().next();
+        Assertions.assertEquals(AlterConfigOp.OpType.DELETE, op.opType());
+        Assertions.assertNull(op.configEntry().value());
+    }
+
+    /** 全量查询任一资源缺失时应失败，不返回看似完整的部分列表。 */
+    @Test
+    @DisplayName("模拟响应：Config 全量查询拒绝不完整响应")
+    void configQueryAllRejectsIncompleteResponse() {
+        Mockito.when(client.describeCluster(Mockito.any()).nodes())
+            .thenReturn(KafkaFuture.completedFuture(List.of(new Node(1, "localhost", 9092))));
+        Mockito.when(client.listTopics(Mockito.any()).names()).thenReturn(KafkaFuture.completedFuture(Set.of("topic-a")));
+        Mockito.when(client.describeConfigs(Mockito.anyCollection(), Mockito.any()).all())
+            .thenReturn(KafkaFuture.completedFuture(Map.of(new ConfigResource(ConfigResource.Type.BROKER, ""), new Config(List.of()))));
+        Assertions.assertThrows(IllegalStateException.class, () -> configs.getConfigs(new GetConfigRequest()));
+    }
+
+    /** 同名配置按资源分别返回，默认 Broker 没有覆盖时允许空列表。 */
+    @Test
+    @DisplayName("模拟响应：Config 全量查询保留目标且不伪造默认覆盖")
+    @SuppressWarnings("unchecked")
+    void configQueryAllPreservesTargetsAndEmptyDefaults() throws Exception {
+        Mockito.when(client.describeCluster(Mockito.any()).nodes())
+            .thenReturn(KafkaFuture.completedFuture(List.of(new Node(1, "localhost", 9092))));
+        Mockito.when(client.listTopics(Mockito.any()).names()).thenReturn(KafkaFuture.completedFuture(Set.of("topic-a", "topic-b")));
+        var defaults = new ConfigResource(ConfigResource.Type.BROKER, "");
+        var broker = new ConfigResource(ConfigResource.Type.BROKER, "1");
+        var topicA = new ConfigResource(ConfigResource.Type.TOPIC, "topic-a");
+        var topicB = new ConfigResource(ConfigResource.Type.TOPIC, "topic-b");
+        Config entry = new Config(List.of(new ConfigEntry("retention.ms", "60000")));
+        Mockito.when(client.describeConfigs(Mockito.anyCollection(), Mockito.any()).all())
+            .thenReturn(KafkaFuture.completedFuture(Map.of(defaults, new Config(List.of()), broker, entry, topicA, entry, topicB, entry)));
+        Mockito.clearInvocations(client);
+        var result = configs.getConfigs(new GetConfigRequest());
+        Assertions.assertEquals(3, result.getData().size());
+        Assertions.assertEquals(3, result.getData().stream().map(ConfigMetadata::nodeUnique).distinct().count());
+        Assertions.assertTrue(result.getData().stream().anyMatch(row -> row.getInstanceType() == MetadataType.RUNTIME
+            && "1".equals(row.getInstanceName())));
+        ArgumentCaptor<Collection<ConfigResource>> targets = ArgumentCaptor.forClass(Collection.class);
+        Mockito.verify(client).describeConfigs(targets.capture(), Mockito.any());
+        Assertions.assertEquals(Set.of(defaults, broker, topicA, topicB), new java.util.HashSet<>(targets.getValue()));
+    }
+
+    private ConfigMetadata configMetadata(MetadataType type, String target) {
+        ConfigMetadata entry = new ConfigMetadata();
+        entry.setInstanceType(type);
+        entry.setInstanceName(target);
+        entry.setConfigName("retention.ms");
+        entry.setConfigValue("60000");
+        return entry;
     }
 
     private UpdateConfigRequest updateConfig(GetConfigRequest query, String name, String value) {

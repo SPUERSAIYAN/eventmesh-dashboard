@@ -18,6 +18,7 @@
 package org.apache.eventmesh.dashboard.core.remoting.kafka.live.zk;
 
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
+import org.apache.eventmesh.dashboard.common.enums.MetadataType;
 import org.apache.eventmesh.dashboard.common.enums.message.ResetOffsetMode;
 import org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata;
 import org.apache.eventmesh.dashboard.common.model.metadata.ConfigMetadata;
@@ -389,17 +390,103 @@ class KafkaAdminServicesZkIntegrationTest {
     @Test
     @DisplayName("真实 Kafka：更新指定 Broker 配置：回读生效后恢复原值")
     void updateBrokerConfig() throws Exception {
-        assertBrokerConfigUpdate(false);
+        assertBrokerConfigUpdate(false, false);
     }
 
     /** 更新默认 Broker 配置：回读生效后恢复原值。 */
     @Test
     @DisplayName("真实 Kafka：更新默认 Broker 配置：回读生效后恢复原值")
     void updateDefaultBrokerConfig() throws Exception {
-        assertBrokerConfigUpdate(true);
+        assertBrokerConfigUpdate(true, false);
     }
 
-    private void assertBrokerConfigUpdate(boolean defaults) throws Exception {
+    /** 通过Kafka 独立接口反射查询所有资源，保留目标身份，避免不同资源的同名配置合并。 */
+    @Test
+    @DisplayName("真实 Kafka：Kafka 独立 Config 接口反射查询包含资源目标")
+    void reflectiveQueryConfigs() {
+        var handler = Remoting2Manage.getInstance().createDataMetadataHandler(ConfigRemotingService.class, cluster);
+        List<ConfigMetadata> rows = handler.getData().stream().map(ConfigMetadata.class::cast).toList();
+        Assertions.assertTrue(rows.stream().anyMatch(row -> row.getInstanceType() == MetadataType.TOPIC
+            && topic.equals(row.getInstanceName()) && "retention.ms".equals(row.getConfigName())));
+        Assertions.assertTrue(rows.stream().anyMatch(row -> row.getInstanceType() == MetadataType.RUNTIME));
+        // With no dynamic default overrides Kafka returns no CLUSTER rows; never invent config entries.
+        Assertions.assertTrue(rows.stream().filter(row -> row.getInstanceType() == MetadataType.CLUSTER)
+            .allMatch(row -> "".equals(row.getInstanceName())));
+        Assertions.assertEquals(rows.size(), rows.stream().map(ConfigMetadata::nodeUnique).distinct().count());
+        log.info("【反射查询】配置条数={}，Topic、Broker、默认 Broker 均包含目标信息", rows.size());
+    }
+
+    /** ADD 动作使用原有 UpdateConfigRequest，目标由公共 Metadata 提供。 */
+    @Test
+    @DisplayName("真实 Kafka：反射 ADD 设置指定 Topic 配置")
+    void reflectiveAddTopicConfig() throws Exception {
+        ConfigMetadata entry = new ConfigMetadata();
+        entry.setId(1L);
+        entry.setInstanceType(MetadataType.TOPIC);
+        entry.setInstanceName(topic);
+        entry.setConfigName("compression.type");
+        entry.setConfigValue("gzip");
+        var handler = Remoting2Manage.getInstance().createDataMetadataHandler(ConfigRemotingService.class, cluster);
+        handler.handleAll(List.of(), List.of(entry), List.of(), List.of());
+        var resource = new ConfigResource(ConfigResource.Type.TOPIC, topic);
+        ConfigEntry actual = client.describeConfigs(List.of(resource)).all().get(10, TimeUnit.SECONDS).get(resource).get("compression.type");
+        Assertions.assertEquals("gzip", actual.value());
+        Assertions.assertEquals(topic, entry.getInstanceName());
+        Assertions.assertNull(entry.getInstanceId());
+        log.info("【反射新增回读】Topic={}，compression.type={}，预期=gzip", topic, actual.value());
+    }
+
+    /** 查询结果直接交给 UPDATE，不再由测试手动填写 Request 的目标。 */
+    @Test
+    @DisplayName("真实 Kafka：反射 UPDATE 复用查询返回的配置目标")
+    void reflectiveUpdateTopicConfig() throws Exception {
+        var handler = Remoting2Manage.getInstance().createDataMetadataHandler(ConfigRemotingService.class, cluster);
+        ConfigMetadata entry = handler.getData().stream().map(ConfigMetadata.class::cast)
+            .filter(row -> row.getInstanceType() == MetadataType.TOPIC && topic.equals(row.getInstanceName())
+                && "retention.ms".equals(row.getConfigName())).findFirst().orElseThrow();
+        entry.setId(1L);
+        entry.setConfigValue("900000");
+        handler.handleAll(List.of(), List.of(), List.of(entry), List.of());
+        var resource = new ConfigResource(ConfigResource.Type.TOPIC, topic);
+        var actual = client.describeConfigs(List.of(resource)).all().get(10, TimeUnit.SECONDS).get(resource);
+        Assertions.assertEquals("900000", actual.get("retention.ms").value());
+        Assertions.assertEquals("300000", actual.get("segment.ms").value());
+        log.info("【反射修改回读】Topic={}，retention.ms={}，segment.ms={}，未传配置保留", topic,
+            actual.get("retention.ms").value(), actual.get("segment.ms").value());
+    }
+
+    /** DELETE 只移除动态覆盖，保留其他配置项，并回退到 Broker 默认值。 */
+    @Test
+    @DisplayName("真实 Kafka：反射 DELETE 移除配置覆盖")
+    void reflectiveDeleteTopicConfig() throws Exception {
+        var handler = Remoting2Manage.getInstance().createDataMetadataHandler(ConfigRemotingService.class, cluster);
+        ConfigMetadata entry = handler.getData().stream().map(ConfigMetadata.class::cast)
+            .filter(row -> row.getInstanceType() == MetadataType.TOPIC && topic.equals(row.getInstanceName())
+                && "retention.ms".equals(row.getConfigName())).findFirst().orElseThrow();
+        entry.setId(1L);
+        handler.handleAll(List.of(), List.of(), List.of(), List.of(entry));
+        var resource = new ConfigResource(ConfigResource.Type.TOPIC, topic);
+        var actual = client.describeConfigs(List.of(resource)).all().get(10, TimeUnit.SECONDS).get(resource);
+        Assertions.assertNotEquals(ConfigEntry.ConfigSource.DYNAMIC_TOPIC_CONFIG, actual.get("retention.ms").source());
+        Assertions.assertEquals("300000", actual.get("segment.ms").value());
+        log.info("【反射删除回读】Topic={}，retention.ms 来源={}，segment.ms 保持不变", topic, actual.get("retention.ms").source());
+    }
+
+    /** Broker 配置只通过 Metadata 定位，回读后恢复原有覆盖。 */
+    @Test
+    @DisplayName("真实 Kafka：反射修改指定 Broker 配置并恢复")
+    void reflectiveUpdateBrokerConfig() throws Exception {
+        assertBrokerConfigUpdate(false, true);
+    }
+
+    /** 默认 Broker 配置有显式 CLUSTER 标识，不能由缺省目标误触发。 */
+    @Test
+    @DisplayName("真实 Kafka：反射修改默认 Broker 配置并恢复")
+    void reflectiveUpdateDefaultBrokerConfig() throws Exception {
+        assertBrokerConfigUpdate(true, true);
+    }
+
+    private void assertBrokerConfigUpdate(boolean defaults, boolean reflective) throws Exception {
         int brokerId = client.describeCluster().nodes().get(10, TimeUnit.SECONDS).iterator().next().id();
         GetConfigRequest request = new GetConfigRequest();
         request.setConfigType(ConfigType.NODE);
@@ -409,8 +496,36 @@ class KafkaAdminServicesZkIntegrationTest {
         ConfigEntry.ConfigSource ownSource = !defaults ? ConfigEntry.ConfigSource.DYNAMIC_BROKER_CONFIG
             : ConfigEntry.ConfigSource.DYNAMIC_DEFAULT_BROKER_CONFIG;
         try {
-            UpdateConfigRequest update = updateConfig(request, "log.retention.ms", "604800123");
-            Assertions.assertEquals(200, configs.updateConfigs(update).getCode());
+            if (reflective) {
+                if (defaults) {
+                    // Default-broker describeConfigs returns only existing overrides. Prepare one for query-to-write coverage.
+                    client.incrementalAlterConfigs(Map.of(resource, List.of(new AlterConfigOp(
+                        new ConfigEntry("log.retention.ms", "604800001"), AlterConfigOp.OpType.SET)))).all().get(10, TimeUnit.SECONDS);
+                    boolean prepared = false;
+                    for (int attempt = 0; attempt < 50; attempt++) {
+                        ConfigEntry entry = client.describeConfigs(List.of(resource)).all().get(10, TimeUnit.SECONDS)
+                            .get(resource).get("log.retention.ms");
+                        if (entry != null && "604800001".equals(entry.value())) {
+                            prepared = true;
+                            break;
+                        }
+                        Thread.sleep(100);
+                    }
+                    Assertions.assertTrue(prepared, "Default override fixture did not become visible");
+                }
+                var handler = Remoting2Manage.getInstance().createDataMetadataHandler(ConfigRemotingService.class, cluster);
+                ConfigMetadata entry = handler.getData().stream().map(ConfigMetadata.class::cast)
+                    .filter(row -> row.getInstanceType() == (defaults ? MetadataType.CLUSTER : MetadataType.RUNTIME)
+                        && request.getNode().equals(row.getInstanceName()) && "log.retention.ms".equals(row.getConfigName()))
+                    .findFirst().orElseThrow();
+                entry.setId(1L);
+                entry.setConfigValue("604800123");
+                handler.handleAll(List.of(), List.of(), List.of(entry), List.of());
+                Assertions.assertEquals(request.getNode(), entry.getInstanceName());
+            } else {
+                UpdateConfigRequest update = updateConfig(request, "log.retention.ms", "604800123");
+                Assertions.assertEquals(200, configs.updateConfigs(update).getCode());
+            }
             boolean visible = false;
             for (int attempt = 0; attempt < 50; attempt++) {
                 var current = client.describeConfigs(List.of(resource)).all().get(10, TimeUnit.SECONDS).get(resource).get("log.retention.ms");

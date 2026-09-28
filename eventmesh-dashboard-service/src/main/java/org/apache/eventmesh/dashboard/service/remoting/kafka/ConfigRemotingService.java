@@ -18,15 +18,26 @@
 
 package org.apache.eventmesh.dashboard.service.remoting.kafka;
 
+import org.apache.eventmesh.dashboard.common.annotation.RemotingServiceMethodMapper;
 import org.apache.eventmesh.dashboard.common.model.remoting.BaseGlobalResult;
+import org.apache.eventmesh.dashboard.common.model.remoting.RemotingActionType;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.DeleteConfigRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.config.GetConfigRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.config.GetConfigResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.config.UpdateConfigRequest;
 
-/** Explicit configuration commands; no implicit default broker scope or full replacement. */
+/** Independent Kafka configuration contract with metadata reflection actions. */
 public interface ConfigRemotingService {
 
+    /** Queries the selected target, or discovers all configuration targets when the request has no selector. */
+    @RemotingServiceMethodMapper(RemotingActionType.QUEUE_ALL)
     GetConfigResult getConfigs(GetConfigRequest request) throws Exception;
 
+    @RemotingServiceMethodMapper({RemotingActionType.ADD, RemotingActionType.UPDATE})
     BaseGlobalResult updateConfigs(UpdateConfigRequest request) throws Exception;
+
+    /** Removes dynamic configuration overrides using Kafka DELETE operations. */
+    @RemotingServiceMethodMapper(RemotingActionType.DELETE)
+    BaseGlobalResult deleteConfigs(DeleteConfigRequest request) throws Exception;
+
 }
