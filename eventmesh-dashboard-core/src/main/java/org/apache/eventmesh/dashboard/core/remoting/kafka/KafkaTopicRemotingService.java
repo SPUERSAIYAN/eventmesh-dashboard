@@ -18,10 +18,11 @@
 
 package org.apache.eventmesh.dashboard.core.remoting.kafka;
 
-import org.apache.eventmesh.dashboard.common.model.metadata.KafkaTopicMetadata;
 import org.apache.eventmesh.dashboard.common.model.metadata.TopicMetadata;
-import org.apache.eventmesh.dashboard.common.model.remoting.BaseGlobalResult;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.topic.TopicRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.CreateTopic2Request;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.CreateTopicResult;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.DeleteTopicRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.DeleteTopicResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.GetTopics2Request;
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.GetTopicsResult;
 import org.apache.eventmesh.dashboard.service.remoting.kafka.TopicRemotingService;
@@ -47,48 +48,53 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+
+import com.alibaba.fastjson.JSON;
 
 public class KafkaTopicRemotingService extends AbstractKafkaRemotingService implements TopicRemotingService {
 
     private static final int OPERATION_TIMEOUT_MS = 10000;
 
     @Override
-    public BaseGlobalResult createTopic(TopicRequest request) throws Exception {
-        KafkaTopicMetadata topic = this.requireTopic(request);
-        if (Objects.isNull(topic.getPartitionCount()) || topic.getPartitionCount() <= 0) {
+    public CreateTopicResult createTopic(CreateTopic2Request request) throws Exception {
+        TopicMetadata topic = this.requireTopic(request == null ? null : request.getMetaData());
+        if (Objects.isNull(this.partitionCount(topic)) || this.partitionCount(topic) <= 0) {
             throw new IllegalArgumentException("A positive partitionCount is required for creation");
         }
-        if (Objects.isNull(topic.getReplicationFactor()) || topic.getReplicationFactor() <= 0
-            || topic.getReplicationFactor() > Short.MAX_VALUE) {
+        if (Objects.nonNull(topic.getReplicationFactor()) && (topic.getReplicationFactor() <= 0
+            || topic.getReplicationFactor() > Short.MAX_VALUE)) {
             throw new IllegalArgumentException("replicationFactor must be between 1 and 32767");
         }
-        Map<String, String> configs = this.validateConfigs(topic.getConfigs());
-        NewTopic newTopic = new NewTopic(topic.getTopicName(), topic.getPartitionCount(), topic.getReplicationFactor().shortValue());
+        Map<String, String> configs = this.validateConfigs(topic.getTopicConfig());
+        NewTopic newTopic = new NewTopic(topic.getTopicName(), Optional.of(this.partitionCount(topic)),
+            Optional.ofNullable(topic.getReplicationFactor()).map(Integer::shortValue));
         newTopic.configs(configs);
         this.await(this.getClient().createTopics(List.of(newTopic), new CreateTopicsOptions().timeoutMs(OPERATION_TIMEOUT_MS)).all());
-        return this.success();
+        CreateTopicResult result = new CreateTopicResult();
+        result.setCode(200);
+        return result;
     }
 
     @Override
-    public BaseGlobalResult deleteTopic(TopicRequest request) throws Exception {
-        KafkaTopicMetadata topic = this.requireTopic(request);
+    public DeleteTopicResult deleteTopic(DeleteTopicRequest request) throws Exception {
+        TopicMetadata topic = this.requireTopic(request == null ? null : request.getMetaData());
         this.await(this.getClient().deleteTopics(List.of(topic.getTopicName()), new DeleteTopicsOptions().timeoutMs(OPERATION_TIMEOUT_MS)).all());
-        return this.success();
+        DeleteTopicResult result = new DeleteTopicResult();
+        result.setCode(200);
+        return result;
     }
 
     @Override
-    public BaseGlobalResult updateTopic(TopicRequest request) throws Exception {
-        KafkaTopicMetadata topic = this.requireTopic(request);
-        if (Objects.nonNull(topic.getReplicationFactor())) {
-            throw new IllegalArgumentException("Replication changes require partition reassignment and are not supported");
-        }
-        Integer targetCount = topic.getPartitionCount();
+    public CreateTopicResult updateTopic(CreateTopic2Request request) throws Exception {
+        TopicMetadata topic = this.requireTopic(request == null ? null : request.getMetaData());
+        Integer targetCount = this.partitionCount(topic);
         if (Objects.nonNull(targetCount) && targetCount <= 0) {
             throw new IllegalArgumentException("partitionCount must be positive");
         }
-        Map<String, String> configs = this.validateConfigs(topic.getConfigs());
+        Map<String, String> configs = this.validateConfigs(topic.getTopicConfig());
         if (Objects.isNull(targetCount) && configs.isEmpty()) {
             throw new IllegalArgumentException("Specify partitionCount or at least one config to update");
         }
@@ -98,6 +104,10 @@ public class KafkaTopicRemotingService extends AbstractKafkaRemotingService impl
         if (Objects.isNull(current) || !Objects.equals(current.name(), topic.getTopicName())
             || Objects.isNull(current.partitions()) || current.partitions().isEmpty()) {
             throw new IllegalStateException("Kafka topic description is incomplete: " + topic.getTopicName());
+        }
+        if (topic.getReplicationFactor() != null && current.partitions().stream()
+            .anyMatch(partition -> partition.replicas().size() != topic.getReplicationFactor())) {
+            throw new IllegalArgumentException("Replication changes require partition reassignment and are not supported");
         }
         int currentCount = current.partitions().size();
         if (Objects.nonNull(targetCount) && targetCount < currentCount) {
@@ -132,14 +142,15 @@ public class KafkaTopicRemotingService extends AbstractKafkaRemotingService impl
                 throw e;
             }
         }
-        return this.success();
+        CreateTopicResult result = new CreateTopicResult();
+        result.setCode(200);
+        return result;
     }
 
-    private KafkaTopicMetadata requireTopic(TopicRequest request) {
-        if (Objects.isNull(request) || Objects.isNull(request.getMetaData())) {
-            throw new IllegalArgumentException("Kafka topic metadata is required");
+    private TopicMetadata requireTopic(TopicMetadata topic) {
+        if (Objects.isNull(topic)) {
+            throw new IllegalArgumentException("Topic metadata is required");
         }
-        KafkaTopicMetadata topic = request.getMetaData();
         String name = topic.getTopicName();
         if (Objects.isNull(name) || name.isEmpty() || name.length() > 249 || name.equals(".") || name.equals("..")
             || !name.matches("[a-zA-Z0-9._-]+")) {
@@ -148,14 +159,31 @@ public class KafkaTopicRemotingService extends AbstractKafkaRemotingService impl
         return topic;
     }
 
-    private Map<String, String> validateConfigs(Map<String, String> configs) {
+    private Integer partitionCount(TopicMetadata topic) {
+        if (topic.getReadQueueNum() != null && topic.getWriteQueueNum() != null
+            && !Objects.equals(topic.getReadQueueNum(), topic.getWriteQueueNum())) {
+            throw new IllegalArgumentException("Kafka readQueueNum and writeQueueNum must match");
+        }
+        return topic.getWriteQueueNum() == null ? topic.getReadQueueNum() : topic.getWriteQueueNum();
+    }
+
+    private Map<String, String> validateConfigs(String json) {
+        Map<?, ?> configs = null;
+        if (json != null) {
+            Object parsed = JSON.parse(json);
+            if (!(parsed instanceof Map)) {
+                throw new IllegalArgumentException("topicConfig must be a JSON object of string values");
+            }
+            configs = (Map<?, ?>) parsed;
+        }
         Map<String, String> copy = new LinkedHashMap<>();
         if (Objects.nonNull(configs)) {
             configs.forEach((key, value) -> {
-                if (Objects.isNull(key) || key.isBlank() || !key.equals(key.trim()) || Objects.isNull(value)) {
+                if (!(key instanceof String) || ((String) key).isBlank() || !key.equals(((String) key).trim())
+                    || !(value instanceof String)) {
                     throw new IllegalArgumentException("Config keys must be nonblank and values must be non-null");
                 }
-                copy.put(key, value);
+                copy.put((String) key, (String) value);
             });
         }
         return copy;
@@ -168,12 +196,6 @@ public class KafkaTopicRemotingService extends AbstractKafkaRemotingService impl
             Thread.currentThread().interrupt();
             throw e;
         }
-    }
-
-    private BaseGlobalResult success() {
-        BaseGlobalResult result = new BaseGlobalResult();
-        result.setCode(200);
-        return result;
     }
 
     @Override
@@ -203,6 +225,10 @@ public class KafkaTopicRemotingService extends AbstractKafkaRemotingService impl
                     // Kafka 的读写使用同一组分区；其余未查询的配置保持为空。
                     topic.setReadQueueNum(description.partitions().size());
                     topic.setWriteQueueNum(description.partitions().size());
+                    int replicas = description.partitions().get(0).replicas().size();
+                    if (description.partitions().stream().allMatch(partition -> partition.replicas().size() == replicas)) {
+                        topic.setReplicationFactor(replicas);
+                    }
                     topics.add(topic);
                 }
             }

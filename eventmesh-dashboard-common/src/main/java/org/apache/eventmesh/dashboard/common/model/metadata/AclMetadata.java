@@ -56,6 +56,10 @@ public class AclMetadata extends BaseRuntimeIdBase {
 
     @Override
     public String nodeUnique() {
+        if (this.actions == null && this.policyType == null && this.operation != null && this.patternType != null) {
+            return part(this.resourceType) + part(this.resourceName) + part(this.patternType.toString())
+                + part(this.principal) + part(this.host) + part(this.operation.toString()) + part(this.permissionType);
+        }
         if (this.actions == null && this.policyType == null) {
             return this.principal;
         }

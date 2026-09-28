@@ -18,9 +18,12 @@
 
 package org.apache.eventmesh.dashboard.core.remoting.kafka;
 
+import org.apache.eventmesh.dashboard.common.model.metadata.ConfigMetadata;
 import org.apache.eventmesh.dashboard.common.model.remoting.BaseGlobalResult;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.config.ConfigRequest;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.config.GetConfigsResult;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.ConfigType;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.GetConfigRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.GetConfigResult;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.UpdateConfigRequest;
 import org.apache.eventmesh.dashboard.service.remoting.kafka.ConfigRemotingService;
 
 import org.apache.kafka.clients.admin.AlterConfigOp;
@@ -39,69 +42,86 @@ import java.util.Map;
 public class KafkaConfigRemotingService extends AbstractKafkaRemotingService implements ConfigRemotingService {
 
     @Override
-    public GetConfigsResult getConfigs(ConfigRequest request) throws Exception {
-        ConfigResource resource = this.resource(request);
+    public GetConfigResult getConfigs(GetConfigRequest request) throws Exception {
+        if (request == null) {
+            throw new IllegalArgumentException("Config request is required");
+        }
+        final ConfigResource resource = this.resource(request.getConfigType(), request.getNode(), request.getConfigObjectName());
         Map<ConfigResource, Config> configs = this.awaitResult(this.getClient()
             .describeConfigs(List.of(resource), new DescribeConfigsOptions().timeoutMs(ADMIN_TIMEOUT_MS)).all());
         Config config = configs == null ? null : configs.get(resource);
         if (config == null) {
             throw new IllegalStateException("Kafka configuration response is incomplete");
         }
-        List<GetConfigsResult.Entry> entries = new ArrayList<>();
+        List<ConfigMetadata> entries = new ArrayList<>();
         for (ConfigEntry entry : config.entries()) {
-            GetConfigsResult.Entry converted = new GetConfigsResult.Entry();
-            converted.setName(entry.name());
-            converted.setValue(entry.isSensitive() ? null : entry.value());
+            ConfigMetadata converted = new ConfigMetadata();
+            converted.setConfigName(entry.name());
+            converted.setConfigValue(entry.isSensitive() ? null : entry.value());
             converted.setSensitive(entry.isSensitive());
             converted.setReadOnly(entry.isReadOnly());
             converted.setSource(entry.source().name());
             entries.add(converted);
         }
-        entries.sort(Comparator.comparing(GetConfigsResult.Entry::getName));
-        GetConfigsResult result = new GetConfigsResult();
+        entries.sort(Comparator.comparing(ConfigMetadata::getConfigName));
+        GetConfigResult result = new GetConfigResult();
         result.setCode(200);
         result.setData(entries);
         return result;
     }
 
     @Override
-    public BaseGlobalResult updateConfigs(ConfigRequest request) throws Exception {
-        ConfigResource resource = this.resource(request);
-        if (request.getConfigs() == null || request.getConfigs().isEmpty()) {
-            throw new IllegalArgumentException("At least one config is required");
+    public BaseGlobalResult updateConfigs(UpdateConfigRequest request) throws Exception {
+        if (request == null) {
+            throw new IllegalArgumentException("Config request is required");
+        }
+        final ConfigResource resource = this.resource(request.getConfigType(), request.getNode(), request.getConfigObjectName());
+        if (request.getFullConfig() != null) {
+            throw new IllegalArgumentException("Full configuration replacement is not supported");
+        }
+        List<Object> entries = request.getIncrementConfig();
+        if (request.getMetaData() != null) {
+            if (entries != null) {
+                throw new IllegalArgumentException("Specify metaData or incrementConfig, not both");
+            }
+            entries = List.of(request.getMetaData());
+        }
+        if (entries == null || entries.isEmpty()) {
+            throw new IllegalArgumentException("At least one ConfigMetadata is required");
         }
         Collection<AlterConfigOp> operations = new ArrayList<>();
-        request.getConfigs().forEach((key, value) -> {
-            if (key == null || key.isBlank() || !key.equals(key.trim()) || value == null) {
+        for (Object entry : entries) {
+            if (!(entry instanceof ConfigMetadata)) {
+                throw new IllegalArgumentException("incrementConfig must contain ConfigMetadata");
+            }
+            ConfigMetadata config = (ConfigMetadata) entry;
+            String key = config.getConfigName();
+            if (key == null || key.isBlank() || !key.equals(key.trim()) || config.getConfigValue() == null) {
                 throw new IllegalArgumentException("Config keys must be nonblank and values must be non-null");
             }
-            operations.add(new AlterConfigOp(new ConfigEntry(key, value), AlterConfigOp.OpType.SET));
-        });
+            operations.add(new AlterConfigOp(new ConfigEntry(key, config.getConfigValue()), AlterConfigOp.OpType.SET));
+        }
         this.awaitResult(this.getClient().incrementalAlterConfigs(Map.of(resource, operations),
             new AlterConfigsOptions().timeoutMs(ADMIN_TIMEOUT_MS)).all());
         return this.successfulResult();
     }
 
-    private ConfigResource resource(ConfigRequest request) {
-        if (request == null || request.getScope() == null) {
-            throw new IllegalArgumentException("Config scope is required");
+    private ConfigResource resource(ConfigType type, String node, String objectName) {
+        if (type == ConfigType.TOPIC) {
+            if (node != null) {
+                throw new IllegalArgumentException("Topic configuration must not specify node");
+            }
+            return new ConfigResource(ConfigResource.Type.TOPIC, this.requireName(objectName, "configObjectName"));
         }
-        switch (request.getScope()) {
-            case TOPIC:
-                return new ConfigResource(ConfigResource.Type.TOPIC, this.requireName(request.getResourceName(), "topic"));
-            case BROKER:
-                String broker = this.requireName(request.getResourceName(), "brokerId");
-                if (!broker.matches("0|[1-9][0-9]*") || Long.parseLong(broker) > Integer.MAX_VALUE) {
-                    throw new IllegalArgumentException("brokerId must be a nonnegative integer");
-                }
-                return new ConfigResource(ConfigResource.Type.BROKER, broker);
-            case DEFAULT_BROKER:
-                if (request.getResourceName() != null) {
-                    throw new IllegalArgumentException("DEFAULT_BROKER must not specify resourceName");
-                }
-                return new ConfigResource(ConfigResource.Type.BROKER, "");
-            default:
-                throw new IllegalArgumentException("Unsupported config scope");
+        if (type != ConfigType.NODE || node == null || objectName != null) {
+            throw new IllegalArgumentException("NODE configuration requires node; an explicit empty node selects broker defaults");
         }
+        if (!node.isEmpty()) {
+            if (!node.matches("0|[1-9][0-9]*")) {
+                throw new IllegalArgumentException("node must be a nonnegative broker ID");
+            }
+            Integer.parseInt(node);
+        }
+        return new ConfigResource(ConfigResource.Type.BROKER, node);
     }
 }

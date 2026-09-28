@@ -19,7 +19,6 @@
 package org.apache.eventmesh.dashboard.core.remoting.kafka;
 
 import org.apache.eventmesh.dashboard.common.model.metadata.AclMetadata;
-import org.apache.eventmesh.dashboard.common.model.metadata.KafkaAclMetadata;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.CreateAclRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.CreateAclResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.DeleteAclRequest;
@@ -82,7 +81,7 @@ public class KafkaAclRemotingService extends AbstractKafkaRemotingService implem
         }
         List<AclMetadata> entries = new ArrayList<>();
         for (AclBinding binding : bindings) {
-            KafkaAclMetadata entry = new KafkaAclMetadata();
+            AclMetadata entry = new AclMetadata();
             entry.setResourceType(binding.pattern().resourceType().name());
             entry.setResourceName(binding.pattern().name());
             entry.setPatternType((int) binding.pattern().patternType().code());

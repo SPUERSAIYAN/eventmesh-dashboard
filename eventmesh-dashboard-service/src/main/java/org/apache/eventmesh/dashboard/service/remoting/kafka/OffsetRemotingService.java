@@ -18,10 +18,10 @@
 
 package org.apache.eventmesh.dashboard.service.remoting.kafka;
 
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.offset.ResetOffsetsResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.GetOffsetRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.GetOffsetResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.ResetOffsetRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.offset.ResetOffsetResult;
 
 /** Explicit parameter-driven operations, not metadata synchronization actions. */
 public interface OffsetRemotingService {
@@ -30,5 +30,5 @@ public interface OffsetRemotingService {
     GetOffsetResult getOffsets(GetOffsetRequest request) throws Exception;
 
     /** Topic is required; omitted partitionId targets all partitions of that topic. */
-    ResetOffsetsResult resetOffsets(ResetOffsetRequest request) throws Exception;
+    ResetOffsetResult resetOffsets(ResetOffsetRequest request) throws Exception;
 }

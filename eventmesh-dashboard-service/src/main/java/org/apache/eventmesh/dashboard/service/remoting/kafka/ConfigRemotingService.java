@@ -19,13 +19,14 @@
 package org.apache.eventmesh.dashboard.service.remoting.kafka;
 
 import org.apache.eventmesh.dashboard.common.model.remoting.BaseGlobalResult;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.config.ConfigRequest;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.config.GetConfigsResult;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.GetConfigRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.GetConfigResult;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.UpdateConfigRequest;
 
 /** Explicit configuration commands; no implicit default broker scope or full replacement. */
 public interface ConfigRemotingService {
 
-    GetConfigsResult getConfigs(ConfigRequest request) throws Exception;
+    GetConfigResult getConfigs(GetConfigRequest request) throws Exception;
 
-    BaseGlobalResult updateConfigs(ConfigRequest request) throws Exception;
+    BaseGlobalResult updateConfigs(UpdateConfigRequest request) throws Exception;
 }

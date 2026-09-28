@@ -19,13 +19,13 @@
 package org.apache.eventmesh.dashboard.core.remoting.kafka;
 
 import org.apache.eventmesh.dashboard.common.enums.message.ResetOffsetMode;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.offset.ResetOffsetsResult;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.offset.ResetOffsetsResult.PartitionResult;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.offset.ResetOffsetsResult.Status;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.GetOffsetRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.GetOffsetResponse;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.GetOffsetResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.ResetOffsetRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.offset.ResetOffsetResponse;
+import org.apache.eventmesh.dashboard.common.model.remoting.offset.ResetOffsetResponse.Status;
+import org.apache.eventmesh.dashboard.common.model.remoting.offset.ResetOffsetResult;
 import org.apache.eventmesh.dashboard.service.remoting.kafka.OffsetRemotingService;
 
 import org.apache.kafka.clients.admin.AlterConsumerGroupOffsetsOptions;
@@ -90,7 +90,7 @@ public class KafkaOffsetRemotingService extends AbstractKafkaRemotingService imp
     }
 
     @Override
-    public ResetOffsetsResult resetOffsets(ResetOffsetRequest request) throws Exception {
+    public ResetOffsetResult resetOffsets(ResetOffsetRequest request) throws Exception {
         final String group = this.requireName(request == null ? null : request.getGroupName(), "groupName");
         this.rejectAddress(request.getBootstrapServers());
         this.requireName(request.getTopic(), "topic");
@@ -155,11 +155,11 @@ public class KafkaOffsetRemotingService extends AbstractKafkaRemotingService imp
         return this.outcomes(altered, targets);
     }
 
-    private ResetOffsetsResult outcomes(AlterConsumerGroupOffsetsResult altered, Map<TopicPartition, OffsetAndMetadata> targets) {
+    private ResetOffsetResult outcomes(AlterConsumerGroupOffsetsResult altered, Map<TopicPartition, OffsetAndMetadata> targets) {
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ADMIN_TIMEOUT_MS);
-        List<PartitionResult> rows = new ArrayList<>();
+        List<ResetOffsetResponse> rows = new ArrayList<>();
         for (Map.Entry<TopicPartition, OffsetAndMetadata> target : targets.entrySet()) {
-            PartitionResult row = new PartitionResult();
+            ResetOffsetResponse row = new ResetOffsetResponse();
             row.setTopic(target.getKey().topic());
             row.setPartitionId(target.getKey().partition());
             row.setOffset(target.getValue().offset());
@@ -178,7 +178,7 @@ public class KafkaOffsetRemotingService extends AbstractKafkaRemotingService imp
             rows.add(row);
         }
         boolean success = rows.stream().allMatch(row -> row.getStatus() == Status.SUCCESS);
-        ResetOffsetsResult result = new ResetOffsetsResult();
+        ResetOffsetResult result = new ResetOffsetResult();
         result.setCode(success ? 200 : 207);
         result.setData(rows);
         if (!success) {
@@ -187,7 +187,7 @@ public class KafkaOffsetRemotingService extends AbstractKafkaRemotingService imp
         return result;
     }
 
-    private void failure(PartitionResult row, Throwable error, Status status) {
+    private void failure(ResetOffsetResponse row, Throwable error, Status status) {
         row.setStatus(status);
         row.setErrorCode(error.getClass().getSimpleName());
         row.setErrorMessage(error.getMessage());

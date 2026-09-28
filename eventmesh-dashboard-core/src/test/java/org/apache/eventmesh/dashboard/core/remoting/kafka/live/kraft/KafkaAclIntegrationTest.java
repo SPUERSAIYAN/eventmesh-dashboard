@@ -21,7 +21,6 @@ package org.apache.eventmesh.dashboard.core.remoting.kafka.live.kraft;
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.common.model.metadata.AclMetadata;
 import org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata;
-import org.apache.eventmesh.dashboard.common.model.metadata.KafkaAclMetadata;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.CreateAclRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.DeleteAclRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.GetAcls2Request;
@@ -117,7 +116,7 @@ class KafkaAclIntegrationTest {
         client.createAcls(List.of(expected)).all().get(10, TimeUnit.SECONDS);
         awaitBindings(List.of(expected));
         GetAcls2Request request = new GetAcls2Request();
-        KafkaAclMetadata filter = new KafkaAclMetadata();
+        AclMetadata filter = new AclMetadata();
         filter.setPrincipal(principal);
         request.setMetaData(filter);
         List<AclMetadata> rows = service.getAllAcls(request).getData();
@@ -162,14 +161,14 @@ class KafkaAclIntegrationTest {
         awaitBindings(List.of());
     }
 
-    private CreateAclRequest createRequest(KafkaAclMetadata metadata) {
+    private CreateAclRequest createRequest(AclMetadata metadata) {
         CreateAclRequest request = new CreateAclRequest();
         request.setMetaData(metadata);
         return request;
     }
 
-    private KafkaAclMetadata metadata(AclOperation operation, PatternType pattern, AclPermissionType permission) {
-        KafkaAclMetadata metadata = new KafkaAclMetadata();
+    private AclMetadata metadata(AclOperation operation, PatternType pattern, AclPermissionType permission) {
+        AclMetadata metadata = new AclMetadata();
         metadata.setId(1L);
         metadata.setPrincipal(principal);
         metadata.setHost("*");

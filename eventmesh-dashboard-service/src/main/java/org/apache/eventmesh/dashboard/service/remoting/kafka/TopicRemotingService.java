@@ -19,9 +19,11 @@
 package org.apache.eventmesh.dashboard.service.remoting.kafka;
 
 import org.apache.eventmesh.dashboard.common.annotation.RemotingServiceMethodMapper;
-import org.apache.eventmesh.dashboard.common.model.remoting.BaseGlobalResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.RemotingActionType;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.topic.TopicRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.CreateTopic2Request;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.CreateTopicResult;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.DeleteTopicRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.DeleteTopicResult;
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.GetTopics2Request;
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.GetTopicsResult;
 
@@ -29,13 +31,13 @@ import org.apache.eventmesh.dashboard.common.model.remoting.topic.GetTopicsResul
 public interface TopicRemotingService {
 
     @RemotingServiceMethodMapper(RemotingActionType.ADD)
-    BaseGlobalResult createTopic(TopicRequest request) throws Exception;
+    CreateTopicResult createTopic(CreateTopic2Request request) throws Exception;
 
     @RemotingServiceMethodMapper(RemotingActionType.UPDATE)
-    BaseGlobalResult updateTopic(TopicRequest request) throws Exception;
+    CreateTopicResult updateTopic(CreateTopic2Request request) throws Exception;
 
     @RemotingServiceMethodMapper(RemotingActionType.DELETE)
-    BaseGlobalResult deleteTopic(TopicRequest request) throws Exception;
+    DeleteTopicResult deleteTopic(DeleteTopicRequest request) throws Exception;
 
 
     @RemotingServiceMethodMapper(RemotingActionType.QUEUE_ALL)

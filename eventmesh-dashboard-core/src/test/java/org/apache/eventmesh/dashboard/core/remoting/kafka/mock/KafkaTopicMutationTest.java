@@ -18,13 +18,13 @@
 
 package org.apache.eventmesh.dashboard.core.remoting.kafka.mock;
 
-import org.apache.eventmesh.dashboard.common.model.metadata.KafkaTopicMetadata;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.topic.TopicRequest;
+import org.apache.eventmesh.dashboard.common.model.metadata.TopicMetadata;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.CreateTopic2Request;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.DeleteTopicRequest;
 import org.apache.eventmesh.dashboard.core.function.SDK.ClientWrapper;
 import org.apache.eventmesh.dashboard.core.function.SDK.SDKTypeEnum;
-import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaTopicRemotingService;
 import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaTestLog;
-
+import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaTopicRemotingService;
 
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AlterConfigOp;
@@ -62,11 +62,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
+
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.serializer.SerializerFeature;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -93,7 +95,7 @@ class KafkaTopicMutationTest {
     void createUsesExplicitPartitionsReplicasAndConfigs() throws Exception {
         log.info("【模拟创建】主题=topic-a，分区=3，副本=2，配置=retention.ms:60000");
         createResult(KafkaFuture.completedFuture(null));
-        TopicRequest request = request(3, 2, Map.of("retention.ms", "60000"));
+        CreateTopic2Request request = request(3, 2, Map.of("retention.ms", "60000"));
         Assertions.assertEquals(200, service.createTopic(request).getCode());
         ArgumentCaptor<Collection<NewTopic>> topics = ArgumentCaptor.forClass(Collection.class);
         ArgumentCaptor<CreateTopicsOptions> options = ArgumentCaptor.forClass(CreateTopicsOptions.class);
@@ -102,7 +104,7 @@ class KafkaTopicMutationTest {
         Assertions.assertEquals("topic-a", topic.name());
         Assertions.assertEquals(3, topic.numPartitions());
         Assertions.assertEquals(2, topic.replicationFactor());
-        Assertions.assertEquals(request.getMetaData().getConfigs(), topic.configs());
+        Assertions.assertEquals(JSON.parseObject(request.getMetaData().getTopicConfig()), topic.configs());
         Assertions.assertEquals(10000, options.getValue().timeoutMs());
     }
 
@@ -112,15 +114,15 @@ class KafkaTopicMutationTest {
     void createRejectsInvalidInputBeforeRpc() {
         log.info("【创建校验】缺少名称、非法名称、非正分区、副本越界和空配置值均拒绝");
         Assertions.assertThrows(IllegalArgumentException.class, () -> service.createTopic(null));
-        Assertions.assertThrows(IllegalArgumentException.class, () -> service.createTopic(new TopicRequest()));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> service.createTopic(new CreateTopic2Request()));
         for (String name : List.of("", " ", ".", "..", "bad/name", "x".repeat(250))) {
-            TopicRequest request = request(1, 1, null);
+            CreateTopic2Request request = request(1, 1, null);
             request.getMetaData().setTopicName(name);
             Assertions.assertThrows(IllegalArgumentException.class, () -> service.createTopic(request));
         }
         Assertions.assertThrows(IllegalArgumentException.class, () -> service.createTopic(request(null, 1, null)));
         Assertions.assertThrows(IllegalArgumentException.class, () -> service.createTopic(request(0, 1, null)));
-        for (Integer replicas : new Integer[]{null, 0, -1, 32768}) {
+        for (Integer replicas : new Integer[]{0, -1, 32768}) {
             Assertions.assertThrows(IllegalArgumentException.class, () -> service.createTopic(request(1, replicas, null)));
         }
         Map<String, String> configs = new HashMap<>();
@@ -146,7 +148,7 @@ class KafkaTopicMutationTest {
     void deleteTargetsOnlyRequestedTopic() throws Exception {
         log.info("【模拟删除】只删除 topic-a");
         deleteResult(KafkaFuture.completedFuture(null));
-        Assertions.assertEquals(200, service.deleteTopic(request(null, null, null)).getCode());
+        Assertions.assertEquals(200, service.deleteTopic(deleteRequest()).getCode());
         Mockito.verify(client).deleteTopics(ArgumentMatchers.eq(List.of("topic-a")), ArgumentMatchers.any(DeleteTopicsOptions.class));
     }
 
@@ -155,12 +157,12 @@ class KafkaTopicMutationTest {
     @DisplayName("模拟响应：删除拒绝空名称并保留 Broker 错误")
     void deleteRejectsMissingNameAndPreservesBrokerFailure() {
         log.info("【删除异常】缺少目标不发请求，Broker 无权限保持原始原因");
-        Assertions.assertThrows(IllegalArgumentException.class, () -> service.deleteTopic(new TopicRequest()));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> service.deleteTopic(new DeleteTopicRequest()));
         Mockito.verifyNoInteractions(client);
         TopicAuthorizationException denied = new TopicAuthorizationException(Set.of("topic-a"));
         deleteResult(failed(denied));
         Assertions.assertSame(denied, Assertions.assertThrows(ExecutionException.class,
-            () -> service.deleteTopic(request(null, null, null))).getCause());
+            () -> service.deleteTopic(deleteRequest())).getCause());
     }
 
     /** 更新先预校验再扩分区和修改配置。 */
@@ -294,13 +296,60 @@ class KafkaTopicMutationTest {
         }
     }
 
-    private TopicRequest request(Integer partitions, Integer replicas, Map<String, String> configs) {
-        KafkaTopicMetadata metadata = new KafkaTopicMetadata();
+    /** 公共队列字段不一致或配置 JSON 非字符串键值时拒绝发送请求。 */
+    @Test
+    @DisplayName("模拟响应：公共 Topic 模型拒绝冲突队列数和非法配置")
+    void sharedTopicFieldsRejectConflicts() {
+        CreateTopic2Request request = request(1, null, null);
+        request.getMetaData().setReadQueueNum(2);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> service.createTopic(request));
+        request.getMetaData().setReadQueueNum(1);
+        for (String json : List.of("[]", "null", "{\"retention.ms\":123}", "{\"retention.ms\":null}")) {
+            request.getMetaData().setTopicConfig(json);
+            Assertions.assertThrows(IllegalArgumentException.class, () -> service.createTopic(request));
+        }
+        Mockito.verifyNoInteractions(client);
+    }
+
+    /** 公共模型不提供副本数时交由 Broker 默认配置决定。 */
+    @Test
+    @DisplayName("模拟响应：省略副本数使用 Broker 默认值")
+    @SuppressWarnings("unchecked")
+    void omittedReplicaCountUsesBrokerDefault() throws Exception {
+        createResult(KafkaFuture.completedFuture(null));
+        CreateTopic2Request request = request(2, null, null);
+        request.getMetaData().setReadQueueNum(null);
+        Assertions.assertEquals(200, service.createTopic(request).getCode());
+        ArgumentCaptor<Collection<NewTopic>> topics = ArgumentCaptor.forClass(Collection.class);
+        Mockito.verify(client).createTopics(topics.capture(), Mockito.any());
+        Assertions.assertEquals(2, topics.getValue().iterator().next().numPartitions());
+        Assertions.assertEquals(-1, topics.getValue().iterator().next().replicationFactor());
+    }
+
+    /** 公共 Metadata 携带当前副本数时允许更新，实际修改副本数仍拒绝。 */
+    @Test
+    @DisplayName("模拟响应：公共 Topic 保留现有副本数并拒绝副本变更")
+    void sharedMetadataKeepsExistingReplicas() throws Exception {
+        describe(3);
+        Assertions.assertEquals(200, service.updateTopic(request(3, 1, null)).getCode());
+        Assertions.assertThrows(IllegalArgumentException.class, () -> service.updateTopic(request(3, 2, null)));
+        noWrites();
+    }
+
+    private DeleteTopicRequest deleteRequest() {
+        DeleteTopicRequest request = new DeleteTopicRequest();
+        request.setMetaData(request(null, null, null).getMetaData());
+        return request;
+    }
+
+    private CreateTopic2Request request(Integer partitions, Integer replicas, Map<String, String> configs) {
+        TopicMetadata metadata = new TopicMetadata();
         metadata.setTopicName("topic-a");
-        metadata.setPartitionCount(partitions);
+        metadata.setReadQueueNum(partitions);
+        metadata.setWriteQueueNum(partitions);
         metadata.setReplicationFactor(replicas);
-        metadata.setConfigs(configs);
-        TopicRequest request = new TopicRequest();
+        metadata.setTopicConfig(configs == null ? null : JSON.toJSONString(configs, SerializerFeature.WriteMapNullValue));
+        CreateTopic2Request request = new CreateTopic2Request();
         request.setMetaData(metadata);
         return request;
     }

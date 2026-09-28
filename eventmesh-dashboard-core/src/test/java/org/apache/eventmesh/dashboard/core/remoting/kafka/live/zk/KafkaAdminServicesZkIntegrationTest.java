@@ -20,9 +20,12 @@ package org.apache.eventmesh.dashboard.core.remoting.kafka.live.zk;
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.common.enums.message.ResetOffsetMode;
 import org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata;
+import org.apache.eventmesh.dashboard.common.model.metadata.ConfigMetadata;
 import org.apache.eventmesh.dashboard.common.model.metadata.GroupMetadata;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.ConfigType;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.GetConfigRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.UpdateConfigRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.group.DeleteGroupRequest;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.config.ConfigRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.GetOffsetRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.ResetOffsetRequest;
 import org.apache.eventmesh.dashboard.core.function.SDK.ConfigManage;
@@ -300,10 +303,22 @@ class KafkaAdminServicesZkIntegrationTest {
         Assertions.assertFalse(consumer.assignment().isEmpty());
     }
 
-    private ConfigRequest topicConfig() {
-        ConfigRequest request = new ConfigRequest();
-        request.setScope(ConfigRequest.Scope.TOPIC);
-        request.setResourceName(topic);
+    private UpdateConfigRequest updateConfig(GetConfigRequest query, String name, String value) {
+        UpdateConfigRequest request = new UpdateConfigRequest();
+        request.setConfigType(query.getConfigType());
+        request.setNode(query.getNode());
+        request.setConfigObjectName(query.getConfigObjectName());
+        ConfigMetadata metadata = new ConfigMetadata();
+        metadata.setConfigName(name);
+        metadata.setConfigValue(value);
+        request.setMetaData(metadata);
+        return request;
+    }
+
+    private GetConfigRequest topicConfig() {
+        GetConfigRequest request = new GetConfigRequest();
+        request.setConfigType(ConfigType.TOPIC);
+        request.setConfigObjectName(topic);
         return request;
     }
 
@@ -312,19 +327,19 @@ class KafkaAdminServicesZkIntegrationTest {
     @DisplayName("真实 Kafka：查询 Topic 配置：读取初始保留时间和分段时间")
     void queryTopicConfig() throws Exception {
         var rows = configs.getConfigs(topicConfig()).getData();
-        rows.stream().filter(row -> List.of("retention.ms", "segment.ms").contains(row.getName()))
-            .forEach(row -> log.info("【配置查询结果】Topic={}，配置项={}，实际值={}", topic, row.getName(), row.getValue()));
-        Assertions.assertEquals("600000", rows.stream().filter(row -> row.getName().equals("retention.ms")).findFirst().orElseThrow().getValue());
-        Assertions.assertEquals("300000", rows.stream().filter(row -> row.getName().equals("segment.ms")).findFirst().orElseThrow().getValue());
+        rows.stream().filter(row -> List.of("retention.ms", "segment.ms").contains(row.getConfigName()))
+            .forEach(row -> log.info("【配置查询结果】Topic={}，配置项={}，实际值={}", topic, row.getConfigName(), row.getConfigValue()));
+        Assertions.assertEquals("600000", rows.stream().filter(row -> row.getConfigName().equals("retention.ms")).findFirst().orElseThrow().getConfigValue());
+        Assertions.assertEquals("300000", rows.stream().filter(row -> row.getConfigName().equals("segment.ms")).findFirst().orElseThrow().getConfigValue());
     }
 
     /** 更新 Topic 配置：修改保留时间并保留分段时间。 */
     @Test
     @DisplayName("真实 Kafka：更新 Topic 配置：修改保留时间并保留分段时间")
     void updateTopicConfig() throws Exception {
-        ConfigRequest request = topicConfig();
-        request.setConfigs(Map.of("retention.ms", "900000"));
-        Assertions.assertEquals(200, configs.updateConfigs(request).getCode());
+        GetConfigRequest request = topicConfig();
+        UpdateConfigRequest update = updateConfig(request, "retention.ms", "900000");
+        Assertions.assertEquals(200, configs.updateConfigs(update).getCode());
         var resource = new ConfigResource(ConfigResource.Type.TOPIC, topic);
         var config = client.describeConfigs(List.of(resource)).all().get(10, TimeUnit.SECONDS).get(resource);
         log.info("【配置回读】Topic={}，retention.ms={}，预期=900000；segment.ms={}，预期=300000",
@@ -337,9 +352,9 @@ class KafkaAdminServicesZkIntegrationTest {
     @Test
     @DisplayName("真实 Kafka：非法 Topic 配置：拒绝修改并保留原值")
     void invalidTopicConfigUpdateFails() throws Exception {
-        ConfigRequest request = topicConfig();
-        request.setConfigs(Map.of("retention.ms", "invalid"));
-        Assertions.assertThrows(ExecutionException.class, () -> configs.updateConfigs(request));
+        GetConfigRequest request = topicConfig();
+        UpdateConfigRequest update = updateConfig(request, "retention.ms", "invalid");
+        Assertions.assertThrows(ExecutionException.class, () -> configs.updateConfigs(update));
         var resource = new ConfigResource(ConfigResource.Type.TOPIC, topic);
         Assertions.assertEquals("600000", client.describeConfigs(List.of(resource)).all().get(10, TimeUnit.SECONDS)
             .get(resource).get("retention.ms").value());
@@ -349,12 +364,12 @@ class KafkaAdminServicesZkIntegrationTest {
     @Test
     @DisplayName("真实 Kafka：查询指定 Broker 配置：返回配置列表")
     void queryBrokerConfig() throws Exception {
-        ConfigRequest request = new ConfigRequest();
-        request.setScope(ConfigRequest.Scope.BROKER);
-        request.setResourceName(Integer.toString(client.describeCluster().nodes().get(10, TimeUnit.SECONDS).iterator().next().id()));
+        GetConfigRequest request = new GetConfigRequest();
+        request.setConfigType(ConfigType.NODE);
+        request.setNode(Integer.toString(client.describeCluster().nodes().get(10, TimeUnit.SECONDS).iterator().next().id()));
         var result = configs.getConfigs(request);
         log.info("【配置查询结果】scope={}，目标={}，状态码={}，配置条数={}",
-            request.getScope(), request.getResourceName(), result.getCode(), result.getData().size());
+            request.getConfigType(), request.getNode(), result.getCode(), result.getData().size());
         Assertions.assertFalse(result.getData().isEmpty());
     }
 
@@ -362,10 +377,11 @@ class KafkaAdminServicesZkIntegrationTest {
     @Test
     @DisplayName("真实 Kafka：查询默认 Broker 配置：返回成功结果")
     void queryDefaultBrokerConfig() throws Exception {
-        ConfigRequest request = new ConfigRequest();
-        request.setScope(ConfigRequest.Scope.DEFAULT_BROKER);
+        GetConfigRequest request = new GetConfigRequest();
+        request.setConfigType(ConfigType.NODE);
+        request.setNode("");
         var result = configs.getConfigs(request);
-        log.info("【配置查询结果】scope={}，状态码={}，配置条数={}", request.getScope(), result.getCode(), result.getData().size());
+        log.info("【配置查询结果】scope={}，状态码={}，配置条数={}", request.getConfigType(), result.getCode(), result.getData().size());
         Assertions.assertEquals(200, result.getCode());
     }
 
@@ -373,28 +389,28 @@ class KafkaAdminServicesZkIntegrationTest {
     @Test
     @DisplayName("真实 Kafka：更新指定 Broker 配置：回读生效后恢复原值")
     void updateBrokerConfig() throws Exception {
-        assertBrokerConfigUpdate(ConfigRequest.Scope.BROKER);
+        assertBrokerConfigUpdate(false);
     }
 
     /** 更新默认 Broker 配置：回读生效后恢复原值。 */
     @Test
     @DisplayName("真实 Kafka：更新默认 Broker 配置：回读生效后恢复原值")
     void updateDefaultBrokerConfig() throws Exception {
-        assertBrokerConfigUpdate(ConfigRequest.Scope.DEFAULT_BROKER);
+        assertBrokerConfigUpdate(true);
     }
 
-    private void assertBrokerConfigUpdate(ConfigRequest.Scope scope) throws Exception {
+    private void assertBrokerConfigUpdate(boolean defaults) throws Exception {
         int brokerId = client.describeCluster().nodes().get(10, TimeUnit.SECONDS).iterator().next().id();
-        ConfigRequest request = new ConfigRequest();
-        request.setScope(scope);
-        request.setResourceName(scope == ConfigRequest.Scope.BROKER ? Integer.toString(brokerId) : null);
-        var resource = new ConfigResource(ConfigResource.Type.BROKER, scope == ConfigRequest.Scope.BROKER ? Integer.toString(brokerId) : "");
+        GetConfigRequest request = new GetConfigRequest();
+        request.setConfigType(ConfigType.NODE);
+        request.setNode(!defaults ? Integer.toString(brokerId) : "");
+        var resource = new ConfigResource(ConfigResource.Type.BROKER, !defaults ? Integer.toString(brokerId) : "");
         ConfigEntry original = client.describeConfigs(List.of(resource)).all().get(10, TimeUnit.SECONDS).get(resource).get("log.retention.ms");
-        ConfigEntry.ConfigSource ownSource = scope == ConfigRequest.Scope.BROKER ? ConfigEntry.ConfigSource.DYNAMIC_BROKER_CONFIG
+        ConfigEntry.ConfigSource ownSource = !defaults ? ConfigEntry.ConfigSource.DYNAMIC_BROKER_CONFIG
             : ConfigEntry.ConfigSource.DYNAMIC_DEFAULT_BROKER_CONFIG;
         try {
-            request.setConfigs(Map.of("log.retention.ms", "604800123"));
-            Assertions.assertEquals(200, configs.updateConfigs(request).getCode());
+            UpdateConfigRequest update = updateConfig(request, "log.retention.ms", "604800123");
+            Assertions.assertEquals(200, configs.updateConfigs(update).getCode());
             boolean visible = false;
             for (int attempt = 0; attempt < 50; attempt++) {
                 var current = client.describeConfigs(List.of(resource)).all().get(10, TimeUnit.SECONDS).get(resource).get("log.retention.ms");
@@ -405,7 +421,7 @@ class KafkaAdminServicesZkIntegrationTest {
                 Thread.sleep(100);
             }
             Assertions.assertTrue(visible, "Dynamic configuration did not become visible");
-            log.info("【配置真实验证】scope={}，目标={}，增量修改并回读成功", scope, request.getResourceName());
+            log.info("【配置真实验证】scope={}，目标={}，增量修改并回读成功", defaults, request.getNode());
         } finally {
             boolean hadOverride = original != null && original.source() == ownSource;
             client.incrementalAlterConfigs(Map.of(resource, List.of(new AlterConfigOp(

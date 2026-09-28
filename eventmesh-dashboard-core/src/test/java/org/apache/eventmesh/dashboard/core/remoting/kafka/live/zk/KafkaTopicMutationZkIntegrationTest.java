@@ -19,8 +19,10 @@ package org.apache.eventmesh.dashboard.core.remoting.kafka.live.zk;
 
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata;
-import org.apache.eventmesh.dashboard.common.model.metadata.KafkaTopicMetadata;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.topic.TopicRequest;
+import org.apache.eventmesh.dashboard.common.model.metadata.TopicMetadata;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.CreateTopic2Request;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.DeleteTopicRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.topic.GetTopics2Request;
 import org.apache.eventmesh.dashboard.core.function.SDK.ConfigManage;
 import org.apache.eventmesh.dashboard.core.function.SDK.SDKManage;
 import org.apache.eventmesh.dashboard.core.function.SDK.SDKTypeEnum;
@@ -53,6 +55,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.serializer.SerializerFeature;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -142,7 +147,7 @@ class KafkaTopicMutationZkIntegrationTest {
     @DisplayName("真实 Kafka：删除 Topic：回读确认主题不存在")
     void deleteTopic() throws Exception {
         prepareTopic();
-        Assertions.assertEquals(200, service.deleteTopic(request(null, null, null)).getCode());
+        Assertions.assertEquals(200, service.deleteTopic(deleteRequest()).getCode());
         assertDeleted();
     }
 
@@ -162,7 +167,14 @@ class KafkaTopicMutationZkIntegrationTest {
     void reflectiveUpdate() throws Exception {
         prepareTopic();
         var handler = Remoting2Manage.getInstance().createDataMetadataHandler(TopicRemotingService.class, cluster);
-        handler.handleAll(List.of(), List.of(), List.of(request(2, null, Map.of("retention.ms", "120000")).getMetaData()), List.of());
+        TopicMetadata queried = service.getAllTopics(new GetTopics2Request()).getData().stream()
+            .filter(topic -> topicName.equals(topic.getTopicName())).findFirst().orElseThrow();
+        Assertions.assertEquals(1, queried.getReplicationFactor());
+        queried.setId(1L);
+        queried.setReadQueueNum(2);
+        queried.setWriteQueueNum(2);
+        queried.setTopicConfig("{\"retention.ms\":\"120000\"}");
+        handler.handleAll(List.of(), List.of(), List.of(queried), List.of());
         assertState(2, "120000", "300000");
     }
 
@@ -172,7 +184,11 @@ class KafkaTopicMutationZkIntegrationTest {
     void reflectiveDelete() throws Exception {
         prepareTopic();
         var handler = Remoting2Manage.getInstance().createDataMetadataHandler(TopicRemotingService.class, cluster);
-        handler.handleAll(List.of(), List.of(), List.of(), List.of(request(null, null, null).getMetaData()));
+        var queried = service.getAllTopics(new GetTopics2Request()).getData()
+            .stream().filter(topic -> topicName.equals(topic.getTopicName())).findFirst().orElseThrow();
+        Assertions.assertEquals(TopicMetadata.class, queried.getClass());
+        queried.setId(1L);
+        handler.handleAll(List.of(), List.of(), List.of(), List.of(queried));
         assertDeleted();
     }
 
@@ -202,14 +218,21 @@ class KafkaTopicMutationZkIntegrationTest {
         Assertions.assertInstanceOf(InvalidReplicationFactorException.class, error.getCause());
     }
 
-    private TopicRequest request(Integer partitions, Integer replicas, Map<String, String> configs) {
-        KafkaTopicMetadata metadata = new KafkaTopicMetadata();
+    private DeleteTopicRequest deleteRequest() {
+        DeleteTopicRequest request = new DeleteTopicRequest();
+        request.setMetaData(request(null, null, null).getMetaData());
+        return request;
+    }
+
+    private CreateTopic2Request request(Integer partitions, Integer replicas, Map<String, String> configs) {
+        TopicMetadata metadata = new TopicMetadata();
         metadata.setId(1L);
         metadata.setTopicName(topicName);
-        metadata.setPartitionCount(partitions);
+        metadata.setReadQueueNum(partitions);
+        metadata.setWriteQueueNum(partitions);
         metadata.setReplicationFactor(replicas);
-        metadata.setConfigs(configs);
-        TopicRequest request = new TopicRequest();
+        metadata.setTopicConfig(configs == null ? null : JSON.toJSONString(configs, SerializerFeature.WriteMapNullValue));
+        CreateTopic2Request request = new CreateTopic2Request();
         request.setMetaData(metadata);
         return request;
     }

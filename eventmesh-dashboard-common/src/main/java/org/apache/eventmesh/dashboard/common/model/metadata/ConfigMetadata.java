@@ -42,6 +42,13 @@ public class ConfigMetadata extends BaseRuntimeIdBase {
 
     private Long instanceId;
 
+    /** Optional remote attributes; not persisted by the current console schema. */
+    private Boolean sensitive;
+
+    private Boolean readOnly;
+
+    private String source;
+
 
     @Override
     public String nodeUnique() {

@@ -19,17 +19,19 @@
 package org.apache.eventmesh.dashboard.core.remoting.kafka.mock;
 
 import org.apache.eventmesh.dashboard.common.enums.message.ResetOffsetMode;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.config.ConfigRequest;
-import org.apache.eventmesh.dashboard.common.model.remoting.kafka.offset.ResetOffsetsResult.Status;
+import org.apache.eventmesh.dashboard.common.model.metadata.ConfigMetadata;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.ConfigType;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.GetConfigRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.config.UpdateConfigRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.GetOffsetRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.ResetOffsetRequest;
+import org.apache.eventmesh.dashboard.common.model.remoting.offset.ResetOffsetResponse.Status;
 import org.apache.eventmesh.dashboard.core.function.SDK.ClientWrapper;
 import org.apache.eventmesh.dashboard.core.function.SDK.SDKTypeEnum;
 import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaConfigRemotingService;
 import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaGroupRemotingService;
 import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaOffsetRemotingService;
 import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaTestLog;
-
 
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AlterConfigOp;
@@ -64,7 +66,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
@@ -281,13 +282,15 @@ class KafkaAdminServicesTest {
     @Test
     @DisplayName("模拟响应：配置请求必须明确指定目标范围")
     void configRequiresExplicitScopeAndUnambiguousResource() {
-        ConfigRequest request = new ConfigRequest();
+        GetConfigRequest request = new GetConfigRequest();
         Assertions.assertThrows(IllegalArgumentException.class, () -> configs.getConfigs(request));
-        request.setScope(ConfigRequest.Scope.DEFAULT_BROKER);
-        request.setResourceName("1");
+        request.setConfigType(ConfigType.NODE);
+        request.setNode("");
+        request.setConfigObjectName("topic-a");
         Assertions.assertThrows(IllegalArgumentException.class, () -> configs.getConfigs(request));
-        request.setScope(ConfigRequest.Scope.BROKER);
-        request.setResourceName("-1");
+        request.setConfigObjectName(null);
+        request.setConfigType(ConfigType.NODE);
+        request.setNode("-1");
         Assertions.assertThrows(IllegalArgumentException.class, () -> configs.getConfigs(request));
         Mockito.verifyNoInteractions(client);
     }
@@ -304,11 +307,12 @@ class KafkaAdminServicesTest {
         Config config = new Config(List.of(secret));
         Mockito.when(client.describeConfigs(Mockito.anyCollection(), Mockito.any()).all()).thenReturn(KafkaFuture.completedFuture(
             Map.of(new ConfigResource(ConfigResource.Type.BROKER, ""), config)));
-        ConfigRequest request = new ConfigRequest();
-        request.setScope(ConfigRequest.Scope.DEFAULT_BROKER);
+        GetConfigRequest request = new GetConfigRequest();
+        request.setConfigType(ConfigType.NODE);
+        request.setNode("");
         var row = configs.getConfigs(request).getData().get(0);
-        Assertions.assertTrue(row.isSensitive());
-        Assertions.assertNull(row.getValue());
+        Assertions.assertTrue(row.getSensitive());
+        Assertions.assertNull(row.getConfigValue());
         Assertions.assertEquals("DYNAMIC_BROKER_CONFIG", row.getSource());
     }
 
@@ -318,12 +322,12 @@ class KafkaAdminServicesTest {
     @SuppressWarnings("unchecked")
     void configUpdateOnlySetsExplicitKeysAndTarget() throws Exception {
         Mockito.when(client.incrementalAlterConfigs(Mockito.anyMap(), Mockito.any()).all()).thenReturn(KafkaFuture.completedFuture(null));
-        ConfigRequest request = new ConfigRequest();
-        request.setScope(ConfigRequest.Scope.BROKER);
-        request.setResourceName("1");
-        request.setConfigs(Map.of("log.retention.ms", "60000"));
+        GetConfigRequest request = new GetConfigRequest();
+        request.setConfigType(ConfigType.NODE);
+        request.setNode("1");
+        UpdateConfigRequest update = updateConfig(request, "log.retention.ms", "60000");
         Mockito.clearInvocations(client);
-        Assertions.assertEquals(200, configs.updateConfigs(request).getCode());
+        Assertions.assertEquals(200, configs.updateConfigs(update).getCode());
         ArgumentCaptor<Map<ConfigResource, Collection<AlterConfigOp>>> changes = ArgumentCaptor.forClass(Map.class);
         Mockito.verify(client).incrementalAlterConfigs(changes.capture(), Mockito.any());
         Assertions.assertEquals(1, changes.getValue().size());
@@ -331,6 +335,36 @@ class KafkaAdminServicesTest {
         Assertions.assertEquals(1, ops.size());
         Assertions.assertEquals(AlterConfigOp.OpType.SET, ops.iterator().next().opType());
         Assertions.assertEquals("60000", ops.iterator().next().configEntry().value());
+    }
+
+    /** 公共配置请求不允许混合单条与批量内容，也不能静默执行全量替换。 */
+    @Test
+    @DisplayName("模拟响应：公共配置写入拒绝含糊和错误类型")
+    void sharedConfigRejectsAmbiguousPayload() {
+        GetConfigRequest query = new GetConfigRequest();
+        query.setNode("1");
+        UpdateConfigRequest request = updateConfig(query, "log.retention.ms", "60000");
+        request.setFullConfig(List.of());
+        Assertions.assertThrows(IllegalArgumentException.class, () -> configs.updateConfigs(request));
+        request.setFullConfig(null);
+        request.setIncrementConfig(List.of(request.getMetaData()));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> configs.updateConfigs(request));
+        request.setMetaData(null);
+        request.setIncrementConfig(List.of("invalid"));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> configs.updateConfigs(request));
+        Mockito.verifyNoInteractions(client);
+    }
+
+    private UpdateConfigRequest updateConfig(GetConfigRequest query, String name, String value) {
+        UpdateConfigRequest request = new UpdateConfigRequest();
+        request.setConfigType(query.getConfigType());
+        request.setNode(query.getNode());
+        request.setConfigObjectName(query.getConfigObjectName());
+        ConfigMetadata metadata = new ConfigMetadata();
+        metadata.setConfigName(name);
+        metadata.setConfigValue(value);
+        request.setMetaData(metadata);
+        return request;
     }
 
     private ResetOffsetRequest reset() {

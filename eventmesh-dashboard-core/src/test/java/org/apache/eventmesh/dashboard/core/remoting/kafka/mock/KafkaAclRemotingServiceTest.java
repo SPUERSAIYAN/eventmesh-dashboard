@@ -19,7 +19,6 @@
 package org.apache.eventmesh.dashboard.core.remoting.kafka.mock;
 
 import org.apache.eventmesh.dashboard.common.model.metadata.AclMetadata;
-import org.apache.eventmesh.dashboard.common.model.metadata.KafkaAclMetadata;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.CreateAclRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.DeleteAclRequest;
 import org.apache.eventmesh.dashboard.common.model.remoting.acl.GetAcls2Request;
@@ -53,7 +52,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
@@ -128,7 +126,7 @@ class KafkaAclRemotingServiceTest {
     @DisplayName("模拟响应：ACL 查询支持部分条件和 MATCH")
     void queryFilters() throws Exception {
         Mockito.when(client.describeAcls(Mockito.any(), Mockito.any()).values()).thenReturn(KafkaFuture.completedFuture(List.of()));
-        var metadata = new KafkaAclMetadata();
+        var metadata = new AclMetadata();
         metadata.setPrincipal("User:alice");
         metadata.setResourceName("orders");
         metadata.setPatternType((int) PatternType.MATCH.code());
@@ -255,8 +253,8 @@ class KafkaAclRemotingServiceTest {
         Assertions.assertThrows(IllegalArgumentException.class, () -> service.deleteAcl(delete));
     }
 
-    private KafkaAclMetadata metadata() {
-        KafkaAclMetadata metadata = new KafkaAclMetadata();
+    private AclMetadata metadata() {
+        AclMetadata metadata = new AclMetadata();
         metadata.setResourceType("TOPIC");
         metadata.setResourceName("orders");
         metadata.setPatternType((int) PatternType.LITERAL.code());

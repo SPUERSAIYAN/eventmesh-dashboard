@@ -93,6 +93,7 @@ class KafkaTopicRemotingServiceTest {
             TopicMetadata topic = result.getData().get(i);
             Assertions.assertEquals(i == 0 ? 1 : 3, topic.getReadQueueNum());
             Assertions.assertEquals(topic.getReadQueueNum(), topic.getWriteQueueNum());
+            Assertions.assertEquals(1, topic.getReplicationFactor());
             Assertions.assertNull(topic.getId());
             Assertions.assertNull(topic.getRetentionMs());
             Assertions.assertNull(topic.getTopicConfig());
