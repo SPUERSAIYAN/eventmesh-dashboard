@@ -16,12 +16,15 @@
  */
 
 
-package org.apache.eventmesh.dashboard.core.remoting.kafka;
+package org.apache.eventmesh.dashboard.core.remoting.kafka.mock;
 
 import org.apache.eventmesh.dashboard.common.model.metadata.KafkaTopicMetadata;
 import org.apache.eventmesh.dashboard.common.model.remoting.kafka.topic.TopicRequest;
 import org.apache.eventmesh.dashboard.core.function.SDK.ClientWrapper;
 import org.apache.eventmesh.dashboard.core.function.SDK.SDKTypeEnum;
+import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaTopicRemotingService;
+import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaTestLog;
+
 
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AlterConfigOp;
@@ -56,7 +59,10 @@ import java.util.concurrent.TimeoutException;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
@@ -65,6 +71,7 @@ import org.mockito.Mockito;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
+@ExtendWith(KafkaTestLog.class)
 class KafkaTopicMutationTest {
 
     private AdminClient client;
@@ -79,7 +86,9 @@ class KafkaTopicMutationTest {
         service.setClientWrapper(wrapper);
     }
 
+    /** 创建 Topic 时传递指定分区数、副本数和配置。 */
     @Test
+    @DisplayName("模拟响应：创建 Topic 时传递指定分区数、副本数和配置")
     @SuppressWarnings("unchecked")
     void createUsesExplicitPartitionsReplicasAndConfigs() throws Exception {
         log.info("【模拟创建】主题=topic-a，分区=3，副本=2，配置=retention.ms:60000");
@@ -97,7 +106,9 @@ class KafkaTopicMutationTest {
         Assertions.assertEquals(10000, options.getValue().timeoutMs());
     }
 
+    /** 创建参数非法时不发送请求。 */
     @Test
+    @DisplayName("模拟响应：创建参数非法时不发送请求")
     void createRejectsInvalidInputBeforeRpc() {
         log.info("【创建校验】缺少名称、非法名称、非正分区、副本越界和空配置值均拒绝");
         Assertions.assertThrows(IllegalArgumentException.class, () -> service.createTopic(null));
@@ -118,7 +129,9 @@ class KafkaTopicMutationTest {
         Mockito.verifyNoInteractions(client);
     }
 
+    /** 创建失败时保留原始异常。 */
     @Test
+    @DisplayName("模拟响应：创建失败时保留原始异常")
     void createFailurePreservesCause() {
         log.info("【创建异常】Broker 拒绝时不返回成功");
         TopicAuthorizationException denied = new TopicAuthorizationException(Set.of("topic-a"));
@@ -127,7 +140,9 @@ class KafkaTopicMutationTest {
             () -> service.createTopic(request(1, 1, null))).getCause());
     }
 
+    /** 删除仅针对指定 Topic。 */
     @Test
+    @DisplayName("模拟响应：删除仅针对指定 Topic")
     void deleteTargetsOnlyRequestedTopic() throws Exception {
         log.info("【模拟删除】只删除 topic-a");
         deleteResult(KafkaFuture.completedFuture(null));
@@ -135,7 +150,9 @@ class KafkaTopicMutationTest {
         Mockito.verify(client).deleteTopics(ArgumentMatchers.eq(List.of("topic-a")), ArgumentMatchers.any(DeleteTopicsOptions.class));
     }
 
+    /** 删除拒绝空名称并保留 Broker 错误。 */
     @Test
+    @DisplayName("模拟响应：删除拒绝空名称并保留 Broker 错误")
     void deleteRejectsMissingNameAndPreservesBrokerFailure() {
         log.info("【删除异常】缺少目标不发请求，Broker 无权限保持原始原因");
         Assertions.assertThrows(IllegalArgumentException.class, () -> service.deleteTopic(new TopicRequest()));
@@ -146,7 +163,9 @@ class KafkaTopicMutationTest {
             () -> service.deleteTopic(request(null, null, null))).getCause());
     }
 
+    /** 更新先预校验再扩分区和修改配置。 */
     @Test
+    @DisplayName("模拟响应：更新先预校验再扩分区和修改配置")
     @SuppressWarnings("unchecked")
     void updateValidatesBothStagesBeforeExpandingAndSettingConfigs() throws Exception {
         log.info("【模拟更新】分区 1→3，仅设置 retention.ms，先预校验再执行");
@@ -171,7 +190,9 @@ class KafkaTopicMutationTest {
         Assertions.assertEquals("120000", operation.configEntry().value());
     }
 
+    /** 仅修改配置时不改变分区数。 */
     @Test
+    @DisplayName("模拟响应：仅修改配置时不改变分区数")
     void configOnlyUpdateDoesNotChangePartitions() throws Exception {
         log.info("【配置更新】省略分区数时不扩容");
         describe(3);
@@ -180,7 +201,9 @@ class KafkaTopicMutationTest {
         Mockito.verify(client, Mockito.never()).createPartitions(ArgumentMatchers.anyMap(), ArgumentMatchers.any(CreatePartitionsOptions.class));
     }
 
+    /** 分区数相同时不重复扩容。 */
     @Test
+    @DisplayName("模拟响应：分区数相同时不重复扩容")
     void equalPartitionCountIsNoOp() throws Exception {
         log.info("【幂等更新】目标分区等于当前分区，无需发送写请求");
         describe(3);
@@ -188,7 +211,9 @@ class KafkaTopicMutationTest {
         noWrites();
     }
 
+    /** 缩分区请求不能产生写操作。 */
     @Test
+    @DisplayName("模拟响应：缩分区请求不能产生写操作")
     void shrinkRejectsAllWrites() {
         log.info("【缩容拒绝】分区 3→1 时连配置也不修改");
         describe(3);
@@ -196,7 +221,9 @@ class KafkaTopicMutationTest {
         noWrites();
     }
 
+    /** 非法更新参数在请求前被拒绝。 */
     @Test
+    @DisplayName("模拟响应：非法更新参数在请求前被拒绝")
     void invalidUpdateRejectsBeforeRpc() {
         log.info("【更新校验】副本修改、空更新、非法分区和空配置值均拒绝");
         Assertions.assertThrows(IllegalArgumentException.class, () -> service.updateTopic(request(null, 2, null)));
@@ -206,7 +233,9 @@ class KafkaTopicMutationTest {
         Mockito.verifyNoInteractions(client);
     }
 
+    /** 查询失败时不能继续创建或更新。 */
     @Test
+    @DisplayName("模拟响应：查询失败时不能继续创建或更新")
     void failedDescribeDoesNotCreateOrUpdate() {
         log.info("【查询失败】更新前查询无权限，不把失败当作主题不存在");
         DescribeTopicsResult result = Mockito.mock(DescribeTopicsResult.class);
@@ -218,7 +247,9 @@ class KafkaTopicMutationTest {
         noWrites();
     }
 
+    /** 配置预校验失败时不能扩分区。 */
     @Test
+    @DisplayName("模拟响应：配置预校验失败时不能扩分区")
     void failedConfigValidationPreventsExpansion() {
         log.info("【预校验失败】配置不合法时只校验分区，不真正扩容");
         describe(1);
@@ -230,7 +261,9 @@ class KafkaTopicMutationTest {
             ArgumentMatchers.argThat(value -> !value.shouldValidateOnly()));
     }
 
+    /** 扩分区成功但配置失败时明确报告部分完成。 */
     @Test
+    @DisplayName("模拟响应：扩分区成功但配置失败时明确报告部分完成")
     void failedActualConfigUpdateReportsCompletedExpansion() {
         log.info("【部分完成】扩容成功后改配置失败，报告已扩容且保留失败原因");
         describe(1);
@@ -243,7 +276,9 @@ class KafkaTopicMutationTest {
         Assertions.assertSame(denied, error.getCause().getCause());
     }
 
+    /** 写操作超时和中断正确传递。 */
     @Test
+    @DisplayName("模拟响应：写操作超时和中断正确传递")
     @SuppressWarnings("unchecked")
     void writeTimeoutAndInterruptionPropagate() throws Exception {
         log.info("【写入异常】超时不报成功，中断恢复线程标记");

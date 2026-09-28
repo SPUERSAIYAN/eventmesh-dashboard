@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-
-package org.apache.eventmesh.dashboard.core.remoting.kafka;
+package org.apache.eventmesh.dashboard.core.remoting.kafka.live.zk;
 
 import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata;
@@ -29,6 +28,8 @@ import org.apache.eventmesh.dashboard.core.function.SDK.SDKTypeEnum;
 import org.apache.eventmesh.dashboard.core.function.SDK.config.AbstractMultiCreateSDKConfig;
 import org.apache.eventmesh.dashboard.core.function.SDK.config.NetAddress;
 import org.apache.eventmesh.dashboard.core.remoting.Remoting2Manage;
+import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaTestLog;
+import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaTopicRemotingService;
 import org.apache.eventmesh.dashboard.service.remoting.kafka.TopicRemotingService;
 
 import org.apache.kafka.clients.admin.AdminClient;
@@ -42,23 +43,31 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * ZooKeeper 环境：直接连接 127.0.0.1:29092，可在 IDEA 中单独运行每个测试方法，无需 VM options。
+ * 切换测试环境时修改本类 BROKER_HOST / BROKER_PORT；每个方法独立准备并清理测试数据。
+ */
 @Slf4j
-@EnabledIfSystemProperty(named = "kafka.integration", matches = "true")
-class KafkaTopicIntegrationTest {
+@Tag("zookeeper")
+@DisplayName("ZooKeeper 环境：Topic 查询与项目类型注册")
+@ExtendWith(KafkaTestLog.class)
+class KafkaTopicZkIntegrationTest {
 
+    private static final String BROKER_HOST = "127.0.0.1";
+    private static final int BROKER_PORT = 29092;
+
+    /** 在ZooKeeper 集群验证项目 BROKER 类型注册，不将注册类型当作集群模式。 */
     @Test
+    @DisplayName("ZooKeeper 环境：通过项目 BROKER 类型注册查询 Topic 和分区数")
     void queryThroughBrokerRegistration() throws Exception {
         verifyQuery(ClusterType.STORAGE_KAFKA_BROKER);
-    }
-
-    @Test
-    void queryThroughRaftRegistration() throws Exception {
-        verifyQuery(ClusterType.STORAGE_KAFKA_RAFT);
     }
 
     private void verifyQuery(ClusterType clusterType) throws Exception {
@@ -67,8 +76,8 @@ class KafkaTopicIntegrationTest {
         cluster.setClusterType(clusterType);
         AbstractMultiCreateSDKConfig config = ConfigManage.getInstance().getMultiCreateSdkConfig(clusterType, SDKTypeEnum.ADMIN);
         config.setKey(cluster.getId().toString());
-        String host = System.getProperty("kafka.broker.host", "127.0.0.1");
-        int port = Integer.getInteger("kafka.broker.port", 19092);
+        String host = BROKER_HOST;
+        int port = BROKER_PORT;
         config.addNetAddress(NetAddress.create(host, port));
         SDKManage manager = SDKManage.getInstance();
         manager.createClient(SDKTypeEnum.ADMIN, cluster, config, clusterType);
@@ -77,7 +86,7 @@ class KafkaTopicIntegrationTest {
         String prefix = "dashboard-kafka-query-" + UUID.randomUUID();
         List<String> names = List.of(prefix + "-one", prefix + "-three");
         try {
-            log.info("【真实 Kafka】地址={}:{}，注册类型={}，准备自有主题={}", host, port, clusterType, names);
+            log.info("【连接目标】地址={}:{}，项目注册类型={}，准备自有主题={}", host, port, clusterType, names);
             client.createTopics(List.of(new NewTopic(names.get(0), 1, (short) 1), new NewTopic(names.get(1), 3, (short) 1)))
                 .all().get(30, TimeUnit.SECONDS);
             KafkaTopicRemotingService service = Remoting2Manage.getInstance().createRemotingService(TopicRemotingService.class, cluster);

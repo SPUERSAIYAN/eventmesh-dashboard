@@ -16,7 +16,7 @@
  */
 
 
-package org.apache.eventmesh.dashboard.core.remoting.kafka;
+package org.apache.eventmesh.dashboard.core.remoting.kafka.mock;
 
 import org.apache.eventmesh.dashboard.common.model.metadata.TopicMetadata;
 import org.apache.eventmesh.dashboard.common.model.remoting.topic.GetTopics2Request;
@@ -25,6 +25,9 @@ import org.apache.eventmesh.dashboard.core.function.SDK.ClientWrapper;
 import org.apache.eventmesh.dashboard.core.function.SDK.SDKTypeEnum;
 import org.apache.eventmesh.dashboard.core.function.SDK.config.CreateKakfaConfig;
 import org.apache.eventmesh.dashboard.core.function.SDK.operation.kafka.KafkaAdminOperation;
+import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaTopicRemotingService;
+import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaTestLog;
+
 
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.DescribeTopicsOptions;
@@ -47,7 +50,10 @@ import java.util.concurrent.TimeoutException;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
@@ -55,6 +61,7 @@ import org.mockito.Mockito;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
+@ExtendWith(KafkaTestLog.class)
 class KafkaTopicRemotingServiceTest {
 
     private AdminClient client;
@@ -69,7 +76,9 @@ class KafkaTopicRemotingServiceTest {
         service.setClientWrapper(wrapper);
     }
 
+    /** Topic 查询映射分区数并保留未知字段为空。 */
     @Test
+    @DisplayName("模拟响应：Topic 查询映射分区数并保留未知字段为空")
     void queryMapsPartitionsAndLeavesUnknownFieldsUnset() throws Exception {
         log.info("【模拟查询】批量查询两个主题，验证分区映射、排序和未知字段");
         list(KafkaFuture.completedFuture(Set.of("topic-b", "topic-a")));
@@ -97,7 +106,9 @@ class KafkaTopicRemotingServiceTest {
             ArgumentMatchers.any(DescribeTopicsOptions.class));
     }
 
+    /** Topic 列表为空时不查询详情。 */
     @Test
+    @DisplayName("模拟响应：Topic 列表为空时不查询详情")
     void emptyListSkipsDescribe() throws Exception {
         log.info("【模拟查询】空集群返回成功空列表，不发起详情查询");
         list(KafkaFuture.completedFuture(Set.of()));
@@ -107,7 +118,9 @@ class KafkaTopicRemotingServiceTest {
         Mockito.verify(client, Mockito.never()).describeTopics(ArgumentMatchers.anyCollection(), ArgumentMatchers.any(DescribeTopicsOptions.class));
     }
 
+    /** Topic 列表查询失败保留原始异常。 */
     @Test
+    @DisplayName("模拟响应：Topic 列表查询失败保留原始异常")
     void listFailureRetainsCause() {
         log.info("【模拟异常】列表查询无权限，不转为空列表");
         TopicAuthorizationException denied = new TopicAuthorizationException(Set.of("topic-a"));
@@ -116,7 +129,9 @@ class KafkaTopicRemotingServiceTest {
         Assertions.assertSame(denied, error.getCause());
     }
 
+    /** Topic 详情查询失败不能返回部分成功。 */
     @Test
+    @DisplayName("模拟响应：Topic 详情查询失败不能返回部分成功")
     void describeFailureDoesNotReturnPartialSuccess() {
         log.info("【模拟异常】详情查询部分失败，整个查询明确失败");
         list(KafkaFuture.completedFuture(Set.of("topic-a", "topic-b")));
@@ -126,7 +141,9 @@ class KafkaTopicRemotingServiceTest {
         Assertions.assertSame(denied, error.getCause());
     }
 
+    /** Topic 详情不完整时明确失败。 */
     @Test
+    @DisplayName("模拟响应：Topic 详情不完整时明确失败")
     void incompleteDescriptionFails() {
         log.info("【模拟异常】详情缺项，不返回残缺成功列表");
         list(KafkaFuture.completedFuture(Set.of("topic-a", "topic-b")));
@@ -134,14 +151,18 @@ class KafkaTopicRemotingServiceTest {
         Assertions.assertThrows(IllegalStateException.class, () -> service.getAllTopics(new GetTopics2Request()));
     }
 
+    /** Topic 列表响应缺失时明确失败。 */
     @Test
+    @DisplayName("模拟响应：Topic 列表响应缺失时明确失败")
     void missingListFails() {
         log.info("【模拟异常】缺失列表与合法空列表区分");
         list(KafkaFuture.completedFuture(null));
         Assertions.assertThrows(IllegalStateException.class, () -> service.getAllTopics(new GetTopics2Request()));
     }
 
+    /** Topic 查询超时正确传递。 */
     @Test
+    @DisplayName("模拟响应：Topic 查询超时正确传递")
     @SuppressWarnings("unchecked")
     void timeoutPropagates() throws Exception {
         log.info("【模拟异常】列表等待超时，保留异常");
@@ -152,7 +173,9 @@ class KafkaTopicRemotingServiceTest {
         Assertions.assertSame(timeout, Assertions.assertThrows(TimeoutException.class, () -> service.getAllTopics(new GetTopics2Request())));
     }
 
+    /** Topic 查询中断恢复线程标记。 */
     @Test
+    @DisplayName("模拟响应：Topic 查询中断恢复线程标记")
     @SuppressWarnings("unchecked")
     void interruptionRestoresFlag() throws Exception {
         log.info("【模拟异常】详情等待中断，恢复线程中断标记");
@@ -168,7 +191,9 @@ class KafkaTopicRemotingServiceTest {
         }
     }
 
+    /** 创建客户端必须提供连接地址。 */
     @Test
+    @DisplayName("模拟响应：创建客户端必须提供连接地址")
     void clientRequiresBootstrapAddresses() {
         log.info("【连接校验】缺少集群地址时在创建客户端前报错");
         KafkaAdminOperation operation = new KafkaAdminOperation();

@@ -16,7 +16,7 @@
  */
 
 
-package org.apache.eventmesh.dashboard.core.remoting.kafka;
+package org.apache.eventmesh.dashboard.core.remoting.kafka.mock;
 
 import org.apache.eventmesh.dashboard.common.enums.message.ResetOffsetMode;
 import org.apache.eventmesh.dashboard.common.model.remoting.kafka.config.ConfigRequest;
@@ -25,6 +25,11 @@ import org.apache.eventmesh.dashboard.common.model.remoting.offset.GetOffsetRequ
 import org.apache.eventmesh.dashboard.common.model.remoting.offset.ResetOffsetRequest;
 import org.apache.eventmesh.dashboard.core.function.SDK.ClientWrapper;
 import org.apache.eventmesh.dashboard.core.function.SDK.SDKTypeEnum;
+import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaConfigRemotingService;
+import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaGroupRemotingService;
+import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaOffsetRemotingService;
+import org.apache.eventmesh.dashboard.core.remoting.kafka.KafkaTestLog;
+
 
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AlterConfigOp;
@@ -56,10 +61,14 @@ import java.util.concurrent.TimeoutException;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
+@ExtendWith(KafkaTestLog.class)
 class KafkaAdminServicesTest {
 
     private AdminClient client;
@@ -81,7 +90,9 @@ class KafkaAdminServicesTest {
         configs.setClientWrapper(wrapper);
     }
 
+    /** 消费组完整描述转换为名称和成员数。 */
     @Test
+    @DisplayName("模拟响应：消费组完整描述转换为名称和成员数")
     void groupQueryConvertsCompleteDescriptions() throws Exception {
         Mockito.when(client.listConsumerGroups(Mockito.any()).all()).thenReturn(KafkaFuture.completedFuture(List.of(
             new ConsumerGroupListing("group-a", false))));
@@ -94,13 +105,17 @@ class KafkaAdminServicesTest {
         Assertions.assertNull(result.getData().get(0).getRetryQueueNums());
     }
 
+    /** 消费组查询失败不能返回部分成功。 */
     @Test
+    @DisplayName("模拟响应：消费组查询失败不能返回部分成功")
     void groupQueryDoesNotReturnPartialListOnFailure() {
         Mockito.when(client.listConsumerGroups(Mockito.any()).all()).thenReturn(failed(new GroupAuthorizationException("group-a")));
         Assertions.assertThrows(ExecutionException.class, () -> groups.getAllGroups(null));
     }
 
+    /** 消费组描述缺失时明确失败。 */
     @Test
+    @DisplayName("模拟响应：消费组描述缺失时明确失败")
     void groupQueryRejectsMissingDescription() {
         Mockito.when(client.listConsumerGroups(Mockito.any()).all()).thenReturn(KafkaFuture.completedFuture(List.of(
             new ConsumerGroupListing("group-a", false))));
@@ -108,13 +123,17 @@ class KafkaAdminServicesTest {
         Assertions.assertThrows(IllegalStateException.class, () -> groups.getAllGroups(null));
     }
 
+    /** 删除消费组必须指定名称。 */
     @Test
+    @DisplayName("模拟响应：删除消费组必须指定名称")
     void groupDeletionRequiresExplicitName() {
         Assertions.assertThrows(IllegalArgumentException.class, () -> groups.deleteGroup(null));
         Mockito.verifyNoInteractions(client);
     }
 
+    /** 未提交位点保持空且不伪造消息时间戳。 */
     @Test
+    @DisplayName("模拟响应：未提交位点保持空且不伪造消息时间戳")
     void offsetQueryPreservesUncommittedAndDoesNotInventTimestamp() throws Exception {
         topic();
         Mockito.when(client.listConsumerGroupOffsets(Mockito.anyString(), Mockito.any()).partitionsToOffsetAndMetadata())
@@ -130,7 +149,9 @@ class KafkaAdminServicesTest {
         Assertions.assertNull(row.getBrokerName());
     }
 
+    /** 没有提交位点时不扩大为全 Topic 查询。 */
     @Test
+    @DisplayName("模拟响应：没有提交位点时不扩大为全 Topic 查询")
     void emptyCommittedOffsetsDoNotQueryAllTopics() throws Exception {
         Mockito.when(client.listConsumerGroupOffsets(Mockito.anyString(), Mockito.any()).partitionsToOffsetAndMetadata())
             .thenReturn(KafkaFuture.completedFuture(Map.of()));
@@ -141,7 +162,9 @@ class KafkaAdminServicesTest {
         Mockito.verify(client, Mockito.never()).listOffsets(Mockito.anyMap(), Mockito.any());
     }
 
+    /** 位点查询保留原始失败。 */
     @Test
+    @DisplayName("模拟响应：位点查询保留原始失败")
     void queryDoesNotHideOffsetFailure() {
         Mockito.when(client.listConsumerGroupOffsets(Mockito.anyString(), Mockito.any()).partitionsToOffsetAndMetadata())
             .thenReturn(failed(new GroupAuthorizationException("group-a")));
@@ -150,7 +173,9 @@ class KafkaAdminServicesTest {
         Assertions.assertThrows(ExecutionException.class, () -> offsets.getOffsets(request));
     }
 
+    /** 操作参数不能覆盖托管客户端地址。 */
     @Test
+    @DisplayName("模拟响应：操作参数不能覆盖托管客户端地址")
     void operationCannotOverrideManagedAddress() {
         GetOffsetRequest request = new GetOffsetRequest();
         request.setGroupName("group-a");
@@ -159,14 +184,18 @@ class KafkaAdminServicesTest {
         Mockito.verifyNoInteractions(client);
     }
 
+    /** 活跃消费组在重置前被拒绝。 */
     @Test
+    @DisplayName("模拟响应：活跃消费组在重置前被拒绝")
     void activeGroupIsRejectedBeforeAlteration() {
         prepareReset(ConsumerGroupState.STABLE);
         Assertions.assertThrows(IllegalStateException.class, () -> offsets.resetOffsets(reset()));
         Mockito.verify(client, Mockito.never()).alterConsumerGroupOffsets(Mockito.anyString(), Mockito.anyMap(), Mockito.any());
     }
 
+    /** 非法分区和越界位点不产生修改。 */
     @Test
+    @DisplayName("模拟响应：非法分区和越界位点不产生修改")
     void invalidPartitionAndOutOfRangeOffsetNeverAlter() {
         prepareReset(ConsumerGroupState.EMPTY);
         ResetOffsetRequest request = reset();
@@ -178,7 +207,9 @@ class KafkaAdminServicesTest {
         Mockito.verify(client, Mockito.never()).alterConsumerGroupOffsets(Mockito.anyString(), Mockito.anyMap(), Mockito.any());
     }
 
+    /** 没有匹配时间戳时不能自动重置到末尾。 */
     @Test
+    @DisplayName("模拟响应：没有匹配时间戳时不能自动重置到末尾")
     void unmatchedTimestampDoesNotSilentlyResetToEnd() {
         prepareReset(ConsumerGroupState.EMPTY);
         ResetOffsetRequest request = reset();
@@ -189,7 +220,9 @@ class KafkaAdminServicesTest {
         Mockito.verify(client, Mockito.never()).alterConsumerGroupOffsets(Mockito.anyString(), Mockito.anyMap(), Mockito.any());
     }
 
+    /** 分区部分成功时返回各分区状态和原始错误。 */
     @Test
+    @DisplayName("模拟响应：分区部分成功时返回各分区状态和原始错误")
     @SuppressWarnings("unchecked")
     void resetReportsPartialSuccessAndPreservesCause() throws Exception {
         prepareReset(ConsumerGroupState.EMPTY);
@@ -211,7 +244,9 @@ class KafkaAdminServicesTest {
         Assertions.assertEquals(4, targets.getValue().get(partition).offset());
     }
 
+    /** 重置超时返回结果未知。 */
     @Test
+    @DisplayName("模拟响应：重置超时返回结果未知")
     @SuppressWarnings("unchecked")
     void timeoutIsUnknownNotFailed() throws Exception {
         prepareReset(ConsumerGroupState.EMPTY);
@@ -224,7 +259,9 @@ class KafkaAdminServicesTest {
         Assertions.assertEquals(Status.UNKNOWN, result.getData().get(0).getStatus());
     }
 
+    /** 重置中断保留中断标记并返回结果未知。 */
     @Test
+    @DisplayName("模拟响应：重置中断保留中断标记并返回结果未知")
     @SuppressWarnings("unchecked")
     void interruptedResetPreservesFlagAndUnknownOutcome() throws Exception {
         prepareReset(ConsumerGroupState.EMPTY);
@@ -240,7 +277,9 @@ class KafkaAdminServicesTest {
         }
     }
 
+    /** 配置请求必须明确指定目标范围。 */
     @Test
+    @DisplayName("模拟响应：配置请求必须明确指定目标范围")
     void configRequiresExplicitScopeAndUnambiguousResource() {
         ConfigRequest request = new ConfigRequest();
         Assertions.assertThrows(IllegalArgumentException.class, () -> configs.getConfigs(request));
@@ -253,7 +292,9 @@ class KafkaAdminServicesTest {
         Mockito.verifyNoInteractions(client);
     }
 
+    /** 配置查询不返回敏感值。 */
     @Test
+    @DisplayName("模拟响应：配置查询不返回敏感值")
     void configQuerySuppressesSensitiveValues() throws Exception {
         ConfigEntry secret = Mockito.mock(ConfigEntry.class);
         Mockito.when(secret.name()).thenReturn("password");
@@ -271,7 +312,9 @@ class KafkaAdminServicesTest {
         Assertions.assertEquals("DYNAMIC_BROKER_CONFIG", row.getSource());
     }
 
+    /** 配置修改只设置显式传入的键和目标。 */
     @Test
+    @DisplayName("模拟响应：配置修改只设置显式传入的键和目标")
     @SuppressWarnings("unchecked")
     void configUpdateOnlySetsExplicitKeysAndTarget() throws Exception {
         Mockito.when(client.incrementalAlterConfigs(Mockito.anyMap(), Mockito.any()).all()).thenReturn(KafkaFuture.completedFuture(null));
