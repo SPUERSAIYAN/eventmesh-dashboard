@@ -41,6 +41,8 @@ import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.resource.ResourcePattern;
 import org.apache.kafka.common.resource.ResourceType;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -100,9 +102,9 @@ class KafkaAclRemotingServiceTest {
         Mockito.verify(client).deleteAcls(Mockito.eq(List.of(expected)), Mockito.any());
     }
 
-    /** 查询保留同一用户的多条规则及其独立身份。 */
+    /** 查询保留同一用户的多条完整规则，并按字段排序。 */
     @Test
-    @DisplayName("模拟响应：查询保留完整字段和独立规则身份")
+    @DisplayName("模拟响应：查询完整保留并排序同一用户的多条规则")
     void queryCompleteBindings() throws Exception {
         var read = binding("orders", PatternType.LITERAL, AclOperation.READ, AclPermissionType.ALLOW);
         var write = binding("orders", PatternType.LITERAL, AclOperation.WRITE, AclPermissionType.ALLOW);
@@ -118,7 +120,43 @@ class KafkaAclRemotingServiceTest {
         Assertions.assertEquals("orders", row.getResourceName());
         Assertions.assertEquals((int) PatternType.LITERAL.code(), row.getPatternType());
         Assertions.assertEquals("ALLOW", row.getPermissionType());
-        Assertions.assertNotEquals(result.getData().get(0).nodeUnique(), result.getData().get(1).nodeUnique());
+        Assertions.assertEquals(List.of(read, write), result.getData().stream().map(this::binding).toList());
+    }
+
+    @Test
+    @DisplayName("模拟响应：ACL 七个字段逐级排序不受 Broker 返回顺序影响")
+    void querySortsByAllBindingFields() throws Exception {
+        List<Consumer<AclMetadata>> mutations = List.of(acl -> acl.setPermissionType("DENY"),
+            acl -> acl.setOperation((int) AclOperation.DESCRIBE_CONFIGS.code()), acl -> acl.setHost("127.0.0.1"),
+            acl -> acl.setPrincipal("User:bob"), acl -> acl.setPatternType((int) PatternType.PREFIXED.code()),
+            acl -> acl.setResourceName("orders-z"), acl -> acl.setResourceType("TRANSACTIONAL_ID"));
+        List<AclBinding> expected = new ArrayList<>();
+        expected.add(binding(metadata()));
+        for (var mutation : mutations) {
+            var metadata = metadata();
+            mutation.accept(metadata);
+            expected.add(binding(metadata));
+        }
+        List<AclBinding> reversed = new ArrayList<>(expected);
+        Collections.reverse(reversed);
+        Mockito.when(client.describeAcls(Mockito.eq(AclBindingFilter.ANY), Mockito.any()).values())
+            .thenReturn(KafkaFuture.completedFuture(reversed), KafkaFuture.completedFuture(expected));
+        Assertions.assertEquals(expected, service.getAllAcls(new GetAcls2Request()).getData().stream().map(this::binding).toList());
+        Assertions.assertEquals(expected, service.getAllAcls(new GetAcls2Request()).getData().stream().map(this::binding).toList());
+    }
+
+    @Test
+    @DisplayName("公共模型：填写 Kafka 同名字段不改变原有主体身份规则")
+    void sharedIdentityDoesNotInferKafkaFromFields() {
+        var metadata = metadata();
+        Assertions.assertEquals("User:alice", metadata.nodeUnique());
+        metadata.setResourceType("GROUP");
+        metadata.setResourceName("payments");
+        metadata.setPatternType((int) PatternType.PREFIXED.code());
+        metadata.setHost("127.0.0.1");
+        metadata.setOperation((int) AclOperation.WRITE.code());
+        metadata.setPermissionType("DENY");
+        Assertions.assertEquals("User:alice", metadata.nodeUnique());
     }
 
     /** 查询只按已提供的字段筛选，支持 Kafka MATCH 模式。 */
@@ -268,5 +306,11 @@ class KafkaAclRemotingServiceTest {
     private AclBinding binding(String resource, PatternType pattern, AclOperation operation, AclPermissionType permission) {
         return new AclBinding(new ResourcePattern(ResourceType.TOPIC, resource, pattern),
             new AccessControlEntry("User:alice", "*", operation, permission));
+    }
+
+    private AclBinding binding(AclMetadata metadata) {
+        return new AclBinding(new ResourcePattern(ResourceType.valueOf(metadata.getResourceType()), metadata.getResourceName(),
+            PatternType.fromCode(metadata.getPatternType().byteValue())), new AccessControlEntry(metadata.getPrincipal(), metadata.getHost(),
+            AclOperation.fromCode(metadata.getOperation().byteValue()), AclPermissionType.valueOf(metadata.getPermissionType())));
     }
 }

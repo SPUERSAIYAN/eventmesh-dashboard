@@ -91,7 +91,13 @@ public class KafkaAclRemotingService extends AbstractKafkaRemotingService implem
             entry.setPermissionType(binding.entry().permissionType().name());
             entries.add(entry);
         }
-        entries.sort(Comparator.comparing(AclMetadata::nodeUnique));
+        entries.sort(Comparator.comparing(AclMetadata::getResourceType)
+            .thenComparing(AclMetadata::getResourceName)
+            .thenComparing(AclMetadata::getPatternType)
+            .thenComparing(AclMetadata::getPrincipal)
+            .thenComparing(AclMetadata::getHost)
+            .thenComparing(AclMetadata::getOperation)
+            .thenComparing(AclMetadata::getPermissionType));
         GetAclsResult result = new GetAclsResult();
         result.setCode(200);
         result.setData(entries);

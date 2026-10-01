@@ -112,15 +112,19 @@ class KafkaAclIntegrationTest {
     @Test
     @DisplayName("真实 Kafka：查询 ACL 保留完整字段和前缀拒绝规则")
     void queryAcls() throws Exception {
-        var expected = binding(AclOperation.READ, PatternType.PREFIXED, AclPermissionType.DENY);
-        client.createAcls(List.of(expected)).all().get(10, TimeUnit.SECONDS);
-        awaitBindings(List.of(expected));
+        var read = binding(AclOperation.READ, PatternType.PREFIXED, AclPermissionType.DENY);
+        var write = binding(AclOperation.WRITE, PatternType.PREFIXED, AclPermissionType.DENY);
+        client.createAcls(List.of(write, read)).all().get(10, TimeUnit.SECONDS);
+        awaitBindings(List.of(read, write));
         GetAcls2Request request = new GetAcls2Request();
         AclMetadata filter = new AclMetadata();
         filter.setPrincipal(principal);
         request.setMetaData(filter);
         List<AclMetadata> rows = service.getAllAcls(request).getData();
-        Assertions.assertEquals(1, rows.size());
+        Assertions.assertEquals(2, rows.size());
+        Assertions.assertEquals(List.of((int) AclOperation.READ.code(), (int) AclOperation.WRITE.code()),
+            rows.stream().map(AclMetadata::getOperation).toList());
+        Assertions.assertEquals(List.of(principal, principal), rows.stream().map(AclMetadata::getPrincipal).toList());
         AclMetadata actual = rows.get(0);
         Assertions.assertEquals(principal, actual.getPrincipal());
         Assertions.assertEquals("*", actual.getHost());
@@ -152,12 +156,20 @@ class KafkaAclIntegrationTest {
     @Test
     @DisplayName("真实 Kafka：ACL 框架反射新增、查询和删除")
     void reflectiveAclOperations() throws Exception {
-        var metadata = metadata(AclOperation.READ, PatternType.LITERAL, AclPermissionType.ALLOW);
+        var read = metadata(AclOperation.READ, PatternType.LITERAL, AclPermissionType.ALLOW);
+        var write = metadata(AclOperation.WRITE, PatternType.LITERAL, AclPermissionType.ALLOW);
+        write.setId(2L);
         var handler = Remoting2Manage.getInstance().createDataMetadataHandler(AclRemotingService.class, cluster);
-        handler.handleAll(List.of(), List.of(metadata), List.of(), List.of());
-        awaitBindings(List.of(binding(AclOperation.READ, PatternType.LITERAL, AclPermissionType.ALLOW)));
-        Assertions.assertTrue(handler.getData().stream().map(AclMetadata.class::cast).anyMatch(row -> principal.equals(row.getPrincipal())));
-        handler.handleAll(List.of(), List.of(), List.of(), List.of(metadata));
+        handler.handleAll(List.of(), List.of(read, write), List.of(), List.of());
+        awaitBindings(List.of(binding(AclOperation.READ, PatternType.LITERAL, AclPermissionType.ALLOW),
+            binding(AclOperation.WRITE, PatternType.LITERAL, AclPermissionType.ALLOW)));
+        List<AclMetadata> rows = handler.getData().stream().map(AclMetadata.class::cast)
+            .filter(row -> principal.equals(row.getPrincipal())).toList();
+        Assertions.assertEquals(List.of((int) AclOperation.READ.code(), (int) AclOperation.WRITE.code()),
+            rows.stream().map(AclMetadata::getOperation).toList());
+        handler.handleAll(List.of(), List.of(), List.of(), List.of(read));
+        awaitBindings(List.of(binding(AclOperation.WRITE, PatternType.LITERAL, AclPermissionType.ALLOW)));
+        handler.handleAll(List.of(), List.of(), List.of(), List.of(write));
         awaitBindings(List.of());
     }
 
