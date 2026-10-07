@@ -75,6 +75,7 @@ public class ConfigEntity extends BaseRuntimeIdEntity {
     public boolean matchVersion(String eventmeshVersion) {
         return true;
     }
+
     /**
      * 保留 MyBatis 原有属性映射，名称只存储在 name 字段中。
      */

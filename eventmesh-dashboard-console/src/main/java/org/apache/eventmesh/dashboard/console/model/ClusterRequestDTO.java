@@ -16,16 +16,24 @@
  */
 
 
-package org.apache.eventmesh.dashboard.console.model.dto.cluster.cluster;
+package org.apache.eventmesh.dashboard.console.model;
 
-import org.apache.eventmesh.dashboard.console.model.ClusterRequestDTO;
+import org.apache.eventmesh.dashboard.common.enums.ClusterType;
+
+import javax.validation.constraints.NotNull;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+/** 查询或操作集群自身，id 为该集群的主键。 */
 @Data
-@EqualsAndHashCode(callSuper = true)
-public class QueryRelationClusterByClusterIdAndTypeDTO extends ClusterRequestDTO {
+@EqualsAndHashCode(callSuper = false)
+public class ClusterRequestDTO extends OrganizationIdDTO {
+
+    @NotNull
+    private Long id;
+
+    private ClusterType clusterType;
 
 
 }

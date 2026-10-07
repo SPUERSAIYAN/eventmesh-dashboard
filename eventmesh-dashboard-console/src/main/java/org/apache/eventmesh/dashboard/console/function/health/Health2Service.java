@@ -23,6 +23,7 @@ import org.apache.eventmesh.dashboard.common.enums.ClusterType;
 import org.apache.eventmesh.dashboard.common.enums.health.HealthCheckStatus;
 import org.apache.eventmesh.dashboard.common.enums.health.HealthCheckTypeEnum;
 import org.apache.eventmesh.dashboard.common.model.base.BaseSyncBase;
+import org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata;
 import org.apache.eventmesh.dashboard.common.model.metadata.RuntimeMetadata;
 import org.apache.eventmesh.dashboard.common.util.ClasspathScanner;
 import org.apache.eventmesh.dashboard.console.entity.function.HealthCheckResultEntity;
@@ -128,7 +129,8 @@ public class Health2Service {
 
 
     public void unRegister(BaseSyncBase baseSyncBase) {
-        ClusterHealthCheckService clusterHealthCheckService = this.clusterHealthCheckServiceMap.remove(baseSyncBase.getClusterId());
+        ClusterHealthCheckService clusterHealthCheckService = this.clusterHealthCheckServiceMap.remove(baseSyncBase instanceof ClusterMetadata
+            ? baseSyncBase.getId() : baseSyncBase.getClusterId());
         if (Objects.nonNull(clusterHealthCheckService)) {
             clusterHealthCheckService.unRegister(baseSyncBase);
         }
@@ -293,7 +295,8 @@ public class Health2Service {
         private HealthCheckResultEntity createHealthCheckResultEntity(String address) {
             HealthCheckResultEntity healthCheckResultEntity = new HealthCheckResultEntity();
             healthCheckResultEntity.setClusterType(this.baseSyncBase.getClusterType());
-            healthCheckResultEntity.setClusterId(this.baseSyncBase.getClusterId());
+            healthCheckResultEntity.setClusterId(this.baseSyncBase instanceof ClusterMetadata
+                ? this.baseSyncBase.getId() : this.baseSyncBase.getClusterId());
             healthCheckResultEntity.setProtocol("");
             healthCheckResultEntity.setType(2);
             healthCheckResultEntity.setTypeId(this.baseSyncBase.getId());

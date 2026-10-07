@@ -96,7 +96,7 @@ public class TopicController {
     @PostMapping("queryTopicListById")
     public TopicEntity queryTopicById(@Validated @RequestBody RuntimeIdDTO runtimeIdDTO) {
         TopicEntity topicEntity = topicService.selectTopicById(TopicControllerMapper.INSTANCE.queryTopicListById(runtimeIdDTO));
-        if (this.clusterAbilityService.isCapByEntity(topicEntity)) {
+        if (this.clusterAbilityService.isCap(topicEntity.getClusterType())) {
             return topicEntity;
         }
         topicService.queryRuntimeByBaseSyncEntity(
@@ -111,7 +111,7 @@ public class TopicController {
     @GetMapping("deleteTopic")
     public Integer deleteTopic(@Validated @RequestBody IdDTO idDTO) {
         TopicEntity topicEntity = this.topicService.selectTopicById(TopicControllerMapper.INSTANCE.deleteTopic(idDTO));
-        if (this.clusterAbilityService.isCapByEntity(topicEntity)) {
+        if (this.clusterAbilityService.isCap(topicEntity.getClusterType())) {
             return this.topicService.deleteTopicById(topicEntity);
         }
 

@@ -370,6 +370,9 @@ public class ClusterAndRuntimeDomainImpl implements ClusterAndRuntimeDomain {
             Map<Long, ClusterEntity> clusterEntityMap =
                 this.clusterEntityList.stream().collect(Collectors.toMap(ClusterEntity::getId, Function.identity()));
 
+            if (Objects.nonNull(this.clusterEntity)) {
+                clusterEntityMap.put(this.clusterEntity.getId(), this.clusterEntity);
+            }
             Map<Long, List<RuntimeEntity>> runtimeListByClusterIdMap = new HashMap<>();
             Map<Long, List<ClusterEntity>> clusterListByClusterIdMap = new HashMap<>();
             this.clusterRelationshipEntityList.forEach(relation -> {
@@ -381,28 +384,21 @@ public class ClusterAndRuntimeDomainImpl implements ClusterAndRuntimeDomain {
                 clusterAndRuntimeOfRelationshipDO.getClusterRelationshipTripleList().add(triple);
 
                 if (relationshipClusterEntity.getClusterType().isRuntime()) {
-                    runtimeListByClusterIdMap.computeIfAbsent(relationshipClusterEntity.getClusterId(), k -> {
+                    runtimeListByClusterIdMap.computeIfAbsent(relationshipClusterEntity.getId(), k -> {
                         List<RuntimeEntity> runtimeEntityList = new ArrayList<>();
                         clusterAndRuntimeOfRelationshipDO.getRuntimeEntityPairList().add(Pair.of(relationshipClusterEntity, runtimeEntityList));
                         return runtimeEntityList;
                     });
                 }
-                clusterListByClusterIdMap.computeIfAbsent(mainClusterEntity.getClusterId(), k -> {
+                clusterListByClusterIdMap.computeIfAbsent(mainClusterEntity.getId(), k -> {
                     List<ClusterEntity> clusterEntityList = new ArrayList<>();
                     clusterAndRuntimeOfRelationshipDO.getClusterEntityPairleList().add(Pair.of(mainClusterEntity, clusterEntityList));
                     return clusterEntityList;
-                });
-            });
-
-            this.clusterEntityList.forEach(clusterEntity -> {
-                List<ClusterEntity> list = clusterListByClusterIdMap.get(clusterEntity.getId());
-                if (Objects.nonNull(list)) {
-                    list.add(clusterEntity);
-                }
+                }).add(relationshipClusterEntity);
             });
 
             this.runtimeList.forEach(runtimeEntity -> {
-                List<RuntimeEntity> list = runtimeListByClusterIdMap.get(runtimeEntity.getId());
+                List<RuntimeEntity> list = runtimeListByClusterIdMap.get(runtimeEntity.getClusterId());
                 if (Objects.nonNull(list)) {
                     list.add(runtimeEntity);
                 }

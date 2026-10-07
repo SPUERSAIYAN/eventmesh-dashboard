@@ -57,6 +57,6 @@ public class ClusterMetadata extends BaseSyncBase {
 
     @Override
     public String nodeUnique() {
-        return this.getClusterId().toString();
+        return this.getId().toString();
     }
 }
