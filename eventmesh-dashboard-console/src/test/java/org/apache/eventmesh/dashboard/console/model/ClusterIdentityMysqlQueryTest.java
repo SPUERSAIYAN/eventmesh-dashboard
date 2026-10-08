@@ -19,7 +19,9 @@
 package org.apache.eventmesh.dashboard.console.model;
 
 import org.apache.eventmesh.dashboard.common.enums.DeployStatusType;
+import org.apache.eventmesh.dashboard.common.model.base.BaseSyncBase;
 import org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata;
+import org.apache.eventmesh.dashboard.common.model.metadata.RuntimeMetadata;
 import org.apache.eventmesh.dashboard.console.domain.Impl.ClusterAndRuntimeDomainImpl;
 import org.apache.eventmesh.dashboard.console.domain.metadata.ClusterMetadataDomain;
 import org.apache.eventmesh.dashboard.console.entity.cluster.ClusterEntity;
@@ -34,6 +36,7 @@ import org.apache.eventmesh.dashboard.console.service.cluster.impl.ClusterRelati
 import org.apache.eventmesh.dashboard.console.service.cluster.impl.ClusterServiceImpl;
 import org.apache.eventmesh.dashboard.console.service.cluster.impl.RuntimeServiceImpl;
 import org.apache.eventmesh.dashboard.console.spring.support.metadata.convert.ClusterConvertMetaData;
+import org.apache.eventmesh.dashboard.console.spring.support.metadata.convert.RuntimeConvertMetaData;
 
 import org.apache.ibatis.datasource.unpooled.UnpooledDataSource;
 import org.apache.ibatis.mapping.Environment;
@@ -42,9 +45,11 @@ import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
 import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -100,6 +105,8 @@ public class ClusterIdentityMysqlQueryTest {
     public void existingClustersRoundTripThroughQueryAndMetadata() throws Exception {
         List<ClusterEntity> clusters = session.getMapper(ClusterMapper.class).queryAllCluster();
         Assert.assertFalse("实际库需要已有集群数据", clusters.isEmpty());
+        Assert.assertEquals(queryIds("select id from cluster where status=1"),
+            clusters.stream().map(ClusterEntity::getId).collect(Collectors.toSet()));
         for (ClusterEntity cluster : clusters) {
             ClusterRequestDTO dto = new ClusterRequestDTO();
             dto.setId(cluster.getId());
@@ -108,8 +115,16 @@ public class ClusterIdentityMysqlQueryTest {
             Assert.assertEquals(cluster.getName(), result.getName());
             ClusterMetadata metadata = ClusterConvertMetaData.INSTANCE.toMetaData(result);
             Assert.assertEquals(result.getId().toString(), metadata.nodeUnique());
-            Assert.assertEquals(result.getId(), ClusterConvertMetaData.INSTANCE.toEntity(metadata).getId());
-            Assert.assertFalse(new ObjectMapper().findAndRegisterModules().valueToTree(result).has("clusterId"));
+            Assert.assertEquals("ClusterMetadata-" + result.getId(), metadata.getUnique());
+            Assert.assertTrue(metadata.isCluster());
+            ClusterEntity restored = ClusterConvertMetaData.INSTANCE.toEntity(metadata);
+            Assert.assertEquals(result.getId(), restored.getId());
+            Assert.assertEquals(result.getClusterType(), restored.getClusterType());
+            Assert.assertEquals(result.getTrusteeshipType(), restored.getTrusteeshipType());
+            assertMatchesDatabaseRow("cluster", metadata);
+            ObjectMapper json = new ObjectMapper().findAndRegisterModules();
+            Assert.assertFalse(json.valueToTree(result).has("clusterId"));
+            Assert.assertFalse(json.valueToTree(metadata).has("clusterId"));
         }
         System.out.println("MySQL 实际查询通过：" + clusters.size() + " 个集群，DTO → Service → MyBatis → Entity → Metadata 往返");
     }
@@ -158,6 +173,70 @@ public class ClusterIdentityMysqlQueryTest {
         Assert.assertEquals(Long.valueOf(rootId), topology.getColonyDO().getClusterId());
         System.out.println("MySQL 关系查询通过：根集群 " + rootId + "，关系 " + result.getClusterRelationshipTripleList().size()
             + " 条，节点 " + expectedRuntimeIds.size() + " 个，主集群拓扑及父子编号匹配");
+    }
+
+    @Test
+    public void existingRuntimeMetadataKeepsOwnIdAndParentReference() throws Exception {
+        Set<Long> visited = new HashSet<>();
+        int distinctIdentityCount = 0;
+        for (Long clusterId : queryIds("select distinct cluster_id from runtime")) {
+            RuntimeEntity query = new RuntimeEntity();
+            query.setClusterId(clusterId);
+            List<RuntimeEntity> runtimes = session.getMapper(RuntimeMapper.class).getRuntimesToFrontByCluster(query);
+            Map<Long, RuntimeEntity> byId = runtimes.stream().collect(Collectors.toMap(RuntimeEntity::getId, value -> value));
+            Assert.assertEquals(queryIds("select id from runtime where cluster_id=" + clusterId), byId.keySet());
+            for (RuntimeEntity entity : runtimes) {
+                Assert.assertTrue("Each runtime belongs to exactly one selected cluster", visited.add(entity.getId()));
+                RuntimeMetadata metadata = RuntimeConvertMetaData.INSTANCE.toMetaData(entity);
+                Assert.assertEquals(entity.getId(), metadata.getId());
+                Assert.assertEquals(clusterId, metadata.getClusterId());
+                Assert.assertEquals("RuntimeMetadata-" + entity.getId(), metadata.getUnique());
+                Assert.assertEquals("ClusterMetadata-" + clusterId, metadata.clusterUnique());
+                Assert.assertFalse(metadata.isCluster());
+                assertMatchesDatabaseRow("runtime", metadata);
+                Assert.assertEquals(clusterId.longValue(),
+                    new ObjectMapper().findAndRegisterModules().valueToTree(metadata).get("clusterId").asLong());
+                RuntimeEntity restored = RuntimeConvertMetaData.INSTANCE.toEntity(metadata);
+                Assert.assertEquals(entity.getId(), restored.getId());
+                Assert.assertEquals(clusterId, restored.getClusterId());
+                Assert.assertEquals(entity.getClusterType(), restored.getClusterType());
+                Assert.assertEquals(entity.getTrusteeshipType(), restored.getTrusteeshipType());
+                Assert.assertEquals(entity.getStatus(), restored.getStatus());
+                if (!entity.getId().equals(clusterId)) {
+                    distinctIdentityCount++;
+                }
+            }
+        }
+        Assert.assertFalse(visited.isEmpty());
+        Assert.assertTrue("Require real rows whose own id differs from parent id", distinctIdentityCount > 0);
+        Assert.assertEquals(queryIds("select id from runtime"), visited);
+        System.out.println("MySQL Metadata 验证通过：" + visited.size() + " 个 Runtime，"
+            + distinctIdentityCount + " 个自身 id 与所属 clusterId 不同，类型、托管及状态字段与原始 SQL 一致");
+    }
+
+    private void assertMatchesDatabaseRow(String table, BaseSyncBase metadata) throws Exception {
+        Assert.assertTrue(table.equals("cluster") || table.equals("runtime"));
+        try (PreparedStatement statement = session.getConnection().prepareStatement("select * from " + table + " where id=?")) {
+            statement.setLong(1, metadata.getId());
+            try (ResultSet row = statement.executeQuery()) {
+                Assert.assertTrue(row.next());
+                Assert.assertEquals(row.getLong("id"), metadata.getId().longValue());
+                Assert.assertEquals(row.getLong("organization_id"), metadata.getOrganizationId().longValue());
+                Assert.assertEquals(row.getString("cluster_type"), metadata.getClusterType().name());
+                Assert.assertEquals(row.getString("trusteeship_type"), metadata.getTrusteeshipType().name());
+                Assert.assertEquals(row.getString("first_to_whom"), metadata.getFirstToWhom().name());
+                Assert.assertEquals(row.getString("first_sync_state"), metadata.getFirstSyncState().name());
+                Assert.assertEquals(row.getLong("status"), metadata.getStatus().longValue());
+                Assert.assertEquals(row.getInt("is_delete"), metadata.getIsDelete().intValue());
+                Assert.assertEquals(row.getTimestamp("create_time").toLocalDateTime(), metadata.getCreateTime());
+                Assert.assertEquals(row.getTimestamp("update_time").toLocalDateTime(), metadata.getUpdateTime());
+                if (metadata instanceof RuntimeMetadata runtime) {
+                    Assert.assertEquals(row.getLong("cluster_id"), runtime.getClusterId().longValue());
+                    Assert.assertEquals(row.getString("host") + "-" + row.getInt("port"), runtime.nodeUnique());
+                }
+                Assert.assertFalse(row.next());
+            }
+        }
     }
 
     @Test

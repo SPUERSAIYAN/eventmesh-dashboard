@@ -148,7 +148,7 @@ public class TopicController {
             public void handler(ClusterMetadata clusterDO) {
                 TopicEntity topicEntity = TopicControllerMapper.INSTANCE.createTopic(createTopicDTO);
                 createTopicList.add(topicEntity);
-                topicEntity.setClusterId(clusterDO.getClusterId());
+                topicEntity.setClusterId(clusterDO.getId());
                 topicEntity.setClusterType(clusterDO.getClusterType());
                 topicEntity.setRuntimeId(0L);
                 adaptationMetadataTypeWrapper.get(clusterDO.getClusterType(), "create").adaptation(topicEntity, createTopicDTO);

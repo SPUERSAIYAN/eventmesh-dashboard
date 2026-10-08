@@ -130,16 +130,15 @@ public class Health2Service {
 
     public void unRegister(BaseSyncBase baseSyncBase) {
         ClusterHealthCheckService clusterHealthCheckService = this.clusterHealthCheckServiceMap.remove(baseSyncBase instanceof ClusterMetadata
-            ? baseSyncBase.getId() : baseSyncBase.getClusterId());
+            ? baseSyncBase.getId() : ((RuntimeMetadata) baseSyncBase).getClusterId());
         if (Objects.nonNull(clusterHealthCheckService)) {
             clusterHealthCheckService.unRegister(baseSyncBase);
         }
         this.checkServiceMap.remove(getKey(baseSyncBase, HealthCheckTypeEnum.PING));
         this.checkServiceMap.remove(getKey(baseSyncBase, HealthCheckTypeEnum.TOPIC));
         if (log.isDebugEnabled()) {
-            RuntimeMetadata runtimeMetadata = (RuntimeMetadata) baseSyncBase;
-            log.debug("unRegister health check service for {} , {} ,{},{}", baseSyncBase.getClusterType(), baseSyncBase.getId(),
-                runtimeMetadata.getHost(), runtimeMetadata.getPort());
+            log.debug("unRegister health check service for {} , {} , {}", baseSyncBase.getClusterType(), baseSyncBase.getId(),
+                baseSyncBase.getClass().getSimpleName());
         }
     }
 
@@ -296,7 +295,7 @@ public class Health2Service {
             HealthCheckResultEntity healthCheckResultEntity = new HealthCheckResultEntity();
             healthCheckResultEntity.setClusterType(this.baseSyncBase.getClusterType());
             healthCheckResultEntity.setClusterId(this.baseSyncBase instanceof ClusterMetadata
-                ? this.baseSyncBase.getId() : this.baseSyncBase.getClusterId());
+                ? this.baseSyncBase.getId() : ((RuntimeMetadata) this.baseSyncBase).getClusterId());
             healthCheckResultEntity.setProtocol("");
             healthCheckResultEntity.setType(2);
             healthCheckResultEntity.setTypeId(this.baseSyncBase.getId());
