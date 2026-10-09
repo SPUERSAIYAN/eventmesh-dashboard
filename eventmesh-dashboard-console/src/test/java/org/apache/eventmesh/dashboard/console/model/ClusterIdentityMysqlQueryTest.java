@@ -105,7 +105,7 @@ public class ClusterIdentityMysqlQueryTest {
     public void existingClustersRoundTripThroughQueryAndMetadata() throws Exception {
         List<ClusterEntity> clusters = session.getMapper(ClusterMapper.class).queryAllCluster();
         Assert.assertFalse("实际库需要已有集群数据", clusters.isEmpty());
-        Assert.assertEquals(queryIds("select id from cluster where status=1"),
+        Assert.assertEquals(queryIds("select id from cluster where status=1 and is_delete=0"),
             clusters.stream().map(ClusterEntity::getId).collect(Collectors.toSet()));
         for (ClusterEntity cluster : clusters) {
             ClusterRequestDTO dto = new ClusterRequestDTO();
@@ -134,7 +134,7 @@ public class ClusterIdentityMysqlQueryTest {
         long rootId = Long.parseLong(System.getenv("CLUSTER_QUERY_ROOT_ID"));
         QueryRelationClusterByClusterIdAndTypeDTO dto = new QueryRelationClusterByClusterIdAndTypeDTO();
         dto.setId(rootId);
-        Set<Long> expectedDirect = queryIds("select relationship_id from cluster_relationship where cluster_id=" + rootId);
+        Set<Long> expectedDirect = queryIds("select relationship_id from cluster_relationship where status=1 and is_delete=0 and cluster_id=" + rootId);
         Set<Long> actualDirect = clusterService.queryRelationClusterByClusterIdAndType(
             ClusterControllerMapper.INSTANCE.queryRelationClusterByClusterIdAndType(dto)).stream()
             .map(ClusterEntity::getId).collect(Collectors.toSet());
@@ -148,24 +148,24 @@ public class ClusterIdentityMysqlQueryTest {
             Assert.assertEquals(triple.getLeft().getRelationshipId(), triple.getRight().getId());
         });
         for (var pair : result.getClusterEntityPairleList()) {
-            Assert.assertEquals(queryIds("select relationship_id from cluster_relationship where cluster_id=" + pair.getLeft().getId()),
+            Assert.assertEquals(queryIds("select relationship_id from cluster_relationship where status=1 and is_delete=0 and cluster_id=" + pair.getLeft().getId()),
                 pair.getRight().stream().map(ClusterEntity::getId).collect(Collectors.toSet()));
         }
         Set<Long> expectedRuntimeIds = new HashSet<>();
         for (ClusterEntity child : result.getClusterEntityList()) {
-            expectedRuntimeIds.addAll(queryIds("select id from runtime where cluster_id=" + child.getId()));
+            expectedRuntimeIds.addAll(queryIds("select id from runtime where is_delete=0 and cluster_id=" + child.getId()));
         }
         Assert.assertFalse(expectedRuntimeIds.isEmpty());
         Assert.assertEquals(expectedRuntimeIds, result.getRuntimeEntityList().stream().map(RuntimeEntity::getId).collect(Collectors.toSet()));
         for (var type : result.getRuntimeEntityList().stream().map(RuntimeEntity::getClusterType).collect(Collectors.toSet())) {
             for (var group : result.getRuntimeEntityByClusterType(type).entrySet()) {
-                Set<Long> expected = queryIds("select id from runtime where cluster_id=" + group.getKey()
+                Set<Long> expected = queryIds("select id from runtime where is_delete=0 and cluster_id=" + group.getKey()
                     + " and cluster_type='" + type.name() + "'");
                 Assert.assertEquals(expected, group.getValue().stream().map(RuntimeEntity::getId).collect(Collectors.toSet()));
             }
         }
         for (var pair : result.getRuntimeEntityPairList()) {
-            Assert.assertEquals(queryIds("select id from runtime where cluster_id=" + pair.getLeft().getId()),
+            Assert.assertEquals(queryIds("select id from runtime where is_delete=0 and cluster_id=" + pair.getLeft().getId()),
                 pair.getRight().stream().map(RuntimeEntity::getId).collect(Collectors.toSet()));
         }
         ClusterMetadataDomain topology = new ClusterMetadataDomain();
@@ -179,12 +179,12 @@ public class ClusterIdentityMysqlQueryTest {
     public void existingRuntimeMetadataKeepsOwnIdAndParentReference() throws Exception {
         Set<Long> visited = new HashSet<>();
         int distinctIdentityCount = 0;
-        for (Long clusterId : queryIds("select distinct cluster_id from runtime")) {
+        for (Long clusterId : queryIds("select distinct cluster_id from runtime where is_delete=0")) {
             RuntimeEntity query = new RuntimeEntity();
             query.setClusterId(clusterId);
             List<RuntimeEntity> runtimes = session.getMapper(RuntimeMapper.class).getRuntimesToFrontByCluster(query);
             Map<Long, RuntimeEntity> byId = runtimes.stream().collect(Collectors.toMap(RuntimeEntity::getId, value -> value));
-            Assert.assertEquals(queryIds("select id from runtime where cluster_id=" + clusterId), byId.keySet());
+            Assert.assertEquals(queryIds("select id from runtime where is_delete=0 and cluster_id=" + clusterId), byId.keySet());
             for (RuntimeEntity entity : runtimes) {
                 Assert.assertTrue("Each runtime belongs to exactly one selected cluster", visited.add(entity.getId()));
                 RuntimeMetadata metadata = RuntimeConvertMetaData.INSTANCE.toMetaData(entity);
@@ -209,7 +209,7 @@ public class ClusterIdentityMysqlQueryTest {
         }
         Assert.assertFalse(visited.isEmpty());
         Assert.assertTrue("Require real rows whose own id differs from parent id", distinctIdentityCount > 0);
-        Assert.assertEquals(queryIds("select id from runtime"), visited);
+        Assert.assertEquals(queryIds("select id from runtime where is_delete=0"), visited);
         System.out.println("MySQL Metadata 验证通过：" + visited.size() + " 个 Runtime，"
             + distinctIdentityCount + " 个自身 id 与所属 clusterId 不同，类型、托管及状态字段与原始 SQL 一致");
     }

@@ -68,15 +68,15 @@ public class ClusterIdentityQueryTest {
         UnpooledDataSource source = new UnpooledDataSource("org.h2.Driver", "jdbc:h2:mem:" + UUID.randomUUID(), "sa", "");
         connection = source.getConnection();
         try (Statement statement = connection.createStatement()) {
-            statement.execute("create table cluster (id bigint, name varchar(100), cluster_type varchar(100), status int)");
-            statement.execute("insert into cluster values (10, 'root', 'STORAGE_JVM_CLUSTER', 1),"
-                + " (20, 'broker', 'STORAGE_JVM_BROKER', 1), (30, 'other', 'STORAGE_JVM_BROKER', 1)");
-            statement.execute("create table runtime (id bigint, cluster_id bigint, name varchar(100), cluster_type varchar(100), status int)");
-            statement.execute("insert into runtime values (201, 20, 'node', 'STORAGE_JVM_BROKER', 1),"
-                + " (301, 30, 'other-node', 'STORAGE_JVM_BROKER', 1)");
+            statement.execute("create table cluster (id bigint, name varchar(100), cluster_type varchar(100), status int, is_delete int default 0)");
+            statement.execute("insert into cluster values (10, 'root', 'STORAGE_JVM_CLUSTER', 1, 0),"
+                + " (20, 'broker', 'STORAGE_JVM_BROKER', 1, 0), (30, 'other', 'STORAGE_JVM_BROKER', 1, 0)");
+            statement.execute("create table runtime (id bigint, cluster_id bigint, name varchar(100), cluster_type varchar(100), status int, is_delete int default 0)");
+            statement.execute("insert into runtime values (201, 20, 'node', 'STORAGE_JVM_BROKER', 1, 0),"
+                + " (301, 30, 'other-node', 'STORAGE_JVM_BROKER', 1, 0)");
             statement.execute("create table cluster_relationship (id bigint, cluster_id bigint, relationship_id bigint,"
-                + " cluster_type varchar(100), relationship_type varchar(100), status int)");
-            statement.execute("insert into cluster_relationship values (1, 10, 20, 'STORAGE_JVM_CLUSTER', 'STORAGE_JVM_BROKER', 1)");
+                + " cluster_type varchar(100), relationship_type varchar(100), status int, is_delete int default 0)");
+            statement.execute("insert into cluster_relationship values (1, 10, 20, 'STORAGE_JVM_CLUSTER', 'STORAGE_JVM_BROKER', 1, 0)");
         }
         Configuration configuration = new Configuration(new Environment("cluster-query", new JdbcTransactionFactory(), source));
         configuration.setMapUnderscoreToCamelCase(true);

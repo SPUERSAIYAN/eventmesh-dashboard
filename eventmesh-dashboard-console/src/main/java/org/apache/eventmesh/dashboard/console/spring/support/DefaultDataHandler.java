@@ -87,6 +87,13 @@ public class DefaultDataHandler implements DataHandler<RuntimeDO, ClusterDO> {
             this.kubernetesManage.unregister(clusterDO.getClusterInfo());
         }
 
+        clusterDO.getRuntimeMap().values().forEach(runtime -> {
+            RuntimeMetadata metadata = runtime.getRuntimeMetadata();
+            healthService.unRegister(metadata);
+            metadataSyncManage.unRegister(metadata);
+            SDKManage.getInstance().deleteClient(null, metadata.getUnique());
+        });
+        metadataSyncManage.unRegister(clusterDO.getClusterInfo());
         healthService.unRegisterCluster(clusterEntity.getId());
         SDKManage.getInstance().deleteClient(null, clusterDO.getClusterInfo().getUnique());
 

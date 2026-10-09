@@ -49,6 +49,12 @@ public class TopicMetadata extends BaseRuntimeIdBase {
     private String topicConfig;
 
 
+    /** Compatibility for historical deletion writes, limited to this resource type. */
+    @Override
+    public boolean isDelete() {
+        return super.isDelete() || Long.valueOf(0).equals(this.getStatus());
+    }
+
     @Override
     public String nodeUnique() {
         return this.name;

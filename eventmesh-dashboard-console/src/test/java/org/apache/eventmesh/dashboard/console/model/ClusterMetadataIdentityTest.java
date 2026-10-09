@@ -145,10 +145,19 @@ public class ClusterMetadataIdentityTest {
             metadata.setUpdateTime(created.plusSeconds(1));
             Assert.assertTrue(metadata.isUpdate());
             Assert.assertFalse(metadata.isInsert());
-            metadata.setStatus(0L);
+            metadata.setIsDelete(1);
             Assert.assertTrue(metadata.isDelete());
             Assert.assertFalse(metadata.isUpdate());
         }
+        ClusterMetadata stoppedCluster = new ClusterMetadata();
+        stoppedCluster.setStatus(0L);
+        Assert.assertFalse(stoppedCluster.isDelete());
+        RuntimeMetadata stoppedRuntime = new RuntimeMetadata();
+        stoppedRuntime.setStatus(0L);
+        Assert.assertFalse(stoppedRuntime.isDelete());
+        TopicMetadata legacyDeletedTopic = new TopicMetadata();
+        legacyDeletedTopic.setStatus(0L);
+        Assert.assertTrue(legacyDeletedTopic.isDelete());
     }
 
     @Test
@@ -267,7 +276,7 @@ public class ClusterMetadataIdentityTest {
         Map<Long, ClusterMetadata> clusters = (Map<Long, ClusterMetadata>) ReflectionTestUtils.getField(manager, "clusterMetadataMap");
         Assert.assertSame(cluster, clusters.get(20L));
         Assert.assertEquals("ClusterMetadata-20", ReflectionTestUtils.invokeMethod(manager, "createCollectKey", cluster));
-        cluster.setStatus(0L);
+        cluster.setIsDelete(1);
         manager.handlerData(List.of(cluster), List.of(), List.of());
         Assert.assertFalse(clusters.containsKey(20L));
     }

@@ -136,7 +136,7 @@ public abstract class BaseOrganizationBase {
 
     // Shared state predicates; identity/ownership is defined by each metadata subtype.
     public boolean isDelete() {
-        return this.getStatus() == 0;
+        return Integer.valueOf(1).equals(this.getIsDelete());
     }
 
     public boolean isUpdate() {
@@ -144,6 +144,7 @@ public abstract class BaseOrganizationBase {
     }
 
     public boolean isInsert() {
-        return Objects.equals(this.getUpdateTime(), this.getCreateTime());
+        return !this.isDelete() && Objects.nonNull(this.getCreateTime())
+            && Objects.equals(this.getUpdateTime(), this.getCreateTime());
     }
 }

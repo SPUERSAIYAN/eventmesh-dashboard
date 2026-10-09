@@ -36,6 +36,7 @@ public class KafkaAdminOperation extends AbstractSDKOperation<AdminClient, Creat
     @Override
     public AdminClient createClient(CreateKakfaConfig clientConfig) throws Exception {
         Properties props = new Properties();
+        props.put("bootstrap.servers", String.join(",", clientConfig.getNetAddresses()));
         AdminClient adminClient = AdminClient.create(props);
         return adminClient;
     }

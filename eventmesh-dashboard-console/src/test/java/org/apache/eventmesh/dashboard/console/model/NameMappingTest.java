@@ -109,10 +109,10 @@ public class NameMappingTest {
     public void databaseColumnsLoadIntoName() throws Exception {
         UnpooledDataSource source = new UnpooledDataSource("org.h2.Driver", "jdbc:h2:mem:" + UUID.randomUUID(), "sa", "");
         try (Connection connection = source.getConnection(); Statement statement = connection.createStatement()) {
-            statement.execute("create table topic (id bigint, topic_name varchar(100), status int)");
-            statement.execute("insert into topic values (100, 'orders', 1)");
-            statement.execute("create table config (id bigint, config_name varchar(100), status int, is_default int)");
-            statement.execute("insert into config values (200, 'timeout', 1, 0)");
+            statement.execute("create table topic (id bigint, topic_name varchar(100), status int, is_delete int)");
+            statement.execute("insert into topic values (100, 'orders', 1, 0)");
+            statement.execute("create table config (id bigint, config_name varchar(100), status int, is_default int, is_delete int)");
+            statement.execute("insert into config values (200, 'timeout', 1, 0, 0)");
             Configuration configuration = new Configuration(new Environment("name-test", new JdbcTransactionFactory(), source));
             configuration.setMapUnderscoreToCamelCase(true);
             configuration.addMapper(TopicMapper.class);

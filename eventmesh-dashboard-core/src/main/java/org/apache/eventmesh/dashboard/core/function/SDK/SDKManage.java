@@ -150,8 +150,11 @@ public class SDKManage {
      *       1. 只识别 地址？
      *       2. 识别 整个 CreateSDKConfig
      */
-    public <T> T createClient(SDKTypeEnum sdkTypeEnum, BaseSyncBase baseSyncBase, CreateSDKConfig config, ClusterType clusterType) {
+    public synchronized <T> T createClient(SDKTypeEnum sdkTypeEnum, BaseSyncBase baseSyncBase, CreateSDKConfig config, ClusterType clusterType) {
 
+        ClientWrapper wrapper = new ClientWrapper();
+        wrapper.setConfig(config);
+        wrapper.setBaseSyncBase(baseSyncBase);
         try {
 
             SDKMetadataWrapper sdkMetadataWrapper = CLUSTER_TYPE_MAP_CONCURRENT_HASH_MAP.get(clusterType).get(sdkTypeEnum);
@@ -161,31 +164,66 @@ public class SDKManage {
                 return (T) object;
             }
 
-            ClientWrapper wrapper = new ClientWrapper();
-            wrapper.setConfig(config);
-            wrapper.setBaseSyncBase(baseSyncBase);
-
-            wrapper.getClientMap().put(SDKTypeEnum.ADMIN, object);
+            wrapper.getClientMap().put(sdkTypeEnum, object);
             // all 模式下应该共享一个对象。这里需要优化
             if (Objects.equals(SDKTypeEnum.ADMIN, sdkTypeEnum)) {
                 object = sdkMetadataWrapper.abstractSDKOperation.createClient(config);
                 wrapper.getClientMap().put(SDKTypeEnum.PING, object);
             }
             final String uniqueKey = baseSyncBase.getUnique();
+            deleteClient(null, uniqueKey);
             clientMap.put(uniqueKey, wrapper);
             return (T) object;
         } catch (Exception e) {
+            try {
+                closeClients(wrapper, null);
+            } catch (Exception closeError) {
+                e.addSuppressed(closeError);
+            }
             throw new RuntimeException("create client error", e);
         }
     }
 
 
-    public void deleteClient(SDKTypeEnum sdkTypeEnum, String uniqueKey) {
-        if (Objects.isNull(sdkTypeEnum)) {
+    public synchronized void deleteClient(SDKTypeEnum sdkTypeEnum, String uniqueKey) {
+        ClientWrapper wrapper = this.clientMap.get(uniqueKey);
+        if (wrapper == null) {
+            return;
+        }
+        closeClients(wrapper, sdkTypeEnum);
+        if (wrapper.getClientMap().isEmpty()) {
             this.clientMap.remove(uniqueKey);
-            this.stringMapConcurrentHashMap.remove(uniqueKey);
-        } else {
-            this.clientMap.get(uniqueKey).getClientMap().put(sdkTypeEnum, null);
+        }
+        this.stringMapConcurrentHashMap.remove(uniqueKey);
+    }
+
+    /** Successfully closed clients are removed; failed clients remain registered for retry. */
+    private void closeClients(ClientWrapper wrapper, SDKTypeEnum selectedType) {
+        RuntimeException failure = null;
+        Set<Object> attempted = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (SDKTypeEnum type : List.copyOf(wrapper.getClientMap().keySet())) {
+            Object client = wrapper.getClientMap().get(type);
+            if (client == null || (selectedType != null && type != selectedType)) {
+                continue;
+            }
+            if (!attempted.add(client)) {
+                continue;
+            }
+            try {
+                CLUSTER_TYPE_MAP_CONCURRENT_HASH_MAP.get(wrapper.getBaseSyncBase().getClusterType()).get(type)
+                    .abstractSDKOperation.close(client);
+                // An ALL operation may share the same instance across ADMIN and PING.
+                wrapper.getClientMap().entrySet().removeIf(entry -> entry.getValue() == client);
+            } catch (Exception e) {
+                if (failure == null) {
+                    failure = new RuntimeException("close client error", e);
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
         }
     }
 
