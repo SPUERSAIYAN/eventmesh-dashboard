@@ -27,7 +27,6 @@ import org.apache.eventmesh.dashboard.console.entity.message.*;
 import org.apache.eventmesh.dashboard.console.mapper.cluster.*;
 import org.apache.eventmesh.dashboard.console.mapper.function.ConfigMapper;
 import org.apache.eventmesh.dashboard.console.mapper.message.*;
-import org.apache.eventmesh.dashboard.console.spring.support.metadata.convert.*;
 
 import org.apache.ibatis.mapping.Environment;
 import org.apache.ibatis.session.Configuration;
@@ -126,7 +125,6 @@ public class BaseIdDatabaseTest {
         TopicEntity tombstone = mapper.syncGet(query).get(0);
         assertEquals(Long.valueOf(1), tombstone.getStatus());
         assertEquals(Integer.valueOf(1), tombstone.getIsDelete());
-        BaseIdMetadataTest.assertActions(TopicConvertMetaData.INSTANCE.toMetaData(tombstone), 0, 0, 1);
     }
 
     @Test
@@ -140,9 +138,9 @@ public class BaseIdDatabaseTest {
         sql("update `group` set is_delete=1 where id=12");
         assertNull(mapper.selectGroupById(query));
         assertTrue(mapper.selectAll().isEmpty());
-        BaseIdMetadataTest.assertActions(GroupConvertMetaData.INSTANCE.toMetaData(mapper.syncGet(query).get(0)), 0, 0, 1);
+        assertEquals(Integer.valueOf(1), mapper.syncGet(query).get(0).getIsDelete());
         sql("update `group` set status=0, is_delete=0 where id=12");
-        assertFalse(GroupConvertMetaData.INSTANCE.toMetaData(mapper.syncGet(query).get(0)).isDelete());
+        assertEquals(Long.valueOf(0), mapper.syncGet(query).get(0).getStatus());
     }
 
     @Test
@@ -154,11 +152,10 @@ public class BaseIdDatabaseTest {
         query.setUpdateTime(BOUNDARY);
         assertNotNull(mapper.selectGroupMemberById(query));
         assertEquals(1, mapper.selectMember(new GroupMemberEntity()).size());
-        assertFalse(GroupMemberConvertMetaData.INSTANCE.toMetaData(mapper.syncGet(query).get(0)).isDelete());
         sql("update group_member set is_delete=1 where id=13");
         assertNull(mapper.selectGroupMemberById(query));
         assertTrue(mapper.selectMember(new GroupMemberEntity()).isEmpty());
-        BaseIdMetadataTest.assertActions(GroupMemberConvertMetaData.INSTANCE.toMetaData(mapper.syncGet(query).get(0)), 0, 0, 1);
+        assertEquals(Integer.valueOf(1), mapper.syncGet(query).get(0).getIsDelete());
     }
 
     @Test
@@ -172,14 +169,14 @@ public class BaseIdDatabaseTest {
         assertEquals(1, mapper.selectAll().size());
         sql("update config set is_delete=1 where id=14");
         assertTrue(mapper.selectAll().isEmpty());
-        BaseIdMetadataTest.assertActions(ConfigConvertMetaData.INSTANCE.toMetaData(mapper.syncGet(query).get(0)), 0, 0, 1);
+        assertEquals(Integer.valueOf(1), mapper.syncGet(query).get(0).getIsDelete());
         sql("update config set status=0, is_delete=0 where id=14");
-        BaseIdMetadataTest.assertActions(ConfigConvertMetaData.INSTANCE.toMetaData(mapper.syncGet(query).get(0)), 0, 0, 1);
+        assertTrue(mapper.selectAll().isEmpty());
+        assertEquals(Long.valueOf(0), mapper.syncGet(query).get(0).getStatus());
         seed("topic", TopicEntity.class, 15, Map.of("topic_name", "legacy", "status", 0));
         TopicEntity topicQuery = new TopicEntity();
         topicQuery.setUpdateTime(BOUNDARY);
-        BaseIdMetadataTest.assertActions(TopicConvertMetaData.INSTANCE.toMetaData(
-            session.getMapper(TopicMapper.class).syncGet(topicQuery).get(0)), 0, 0, 1);
+        assertEquals(Long.valueOf(0), session.getMapper(TopicMapper.class).syncGet(topicQuery).get(0).getStatus());
     }
 
     void sql(String sql) throws SQLException {

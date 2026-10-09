@@ -41,7 +41,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 
 import javax.annotation.PostConstruct;
@@ -143,36 +142,23 @@ public class FunctionManage {
         if (!this.functionConfig.isEnabledSync()) {
             return;
         }
-        final LocalDateTime date = LocalDateTime.now().withNano(0);
+        LocalDateTime date = LocalDateTime.now();
         List<RuntimeEntity> runtimeEntityList = this.runtimeService.queryByUpdateTime(runtimeEntity);
         List<ClusterEntity> clusterEntityList = this.clusterService.queryByUpdateTime(clusterEntity);
         List<ClusterRelationshipEntity> clusterRelationshipEntityList =
             this.clusterRelationshipService.queryByUpdateTime(clusterRelationshipEntity);
-        // A resumed cluster needs its unchanged runtime and relationship rows as well.
-        boolean rebuildTopology = clusterEntityList.stream().anyMatch(cluster -> Objects.equals(cluster.getStatus(), 1L)
-            && !Integer.valueOf(1).equals(cluster.getIsDelete())
-            && Objects.isNull(this.clusterMetadataDomain.getColonyDO(cluster.getId())));
-        if (rebuildTopology) {
-            RuntimeEntity runtimeSnapshot = new RuntimeEntity();
-            runtimeSnapshot.setUpdateTime(LocalDateTime.of(2000, 1, 1, 0, 0));
-            runtimeEntityList = this.runtimeService.queryByUpdateTime(runtimeSnapshot);
-            ClusterRelationshipEntity relationshipSnapshot = new ClusterRelationshipEntity();
-            relationshipSnapshot.setUpdateTime(runtimeSnapshot.getUpdateTime());
-            clusterRelationshipEntityList = this.clusterRelationshipService.queryByUpdateTime(relationshipSnapshot);
-        }
         if (runtimeEntityList.isEmpty() && clusterEntityList.isEmpty() && clusterRelationshipEntityList.isEmpty()) {
             log.debug("No runtime entities found");
             return;
         }
+        runtimeEntity.setUpdateTime(date);
+        clusterEntity.setUpdateTime(date);
+        clusterRelationshipEntity.setUpdateTime(date);
 
         MetadataAllDO metadataAll =
             MetadataAllDO.builder().clusterEntityList(clusterEntityList).clusterRelationshipEntityList(clusterRelationshipEntityList)
                 .runtimeEntityList(runtimeEntityList).build();
         this.clusterMetadataDomain.handlerMetadata(metadataAll);
-        runtimeEntity.setUpdateTime(date);
-        clusterEntity.setUpdateTime(date);
-        clusterRelationshipEntity.setUpdateTime(date);
-
 
     }
 

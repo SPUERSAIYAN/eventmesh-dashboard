@@ -136,10 +136,7 @@ public class ColonyDO<C extends ClusterBaseDO> {
             this.allColonyDO.put(clusterId, colonyDO);
             current = colonyDO;
         } else {
-            C replacement = (C) object;
-            replacement.setRuntimeMap(current.getClusterDO().getRuntimeMap());
-            replacement.setMultiCreateSDKConfig(current.getClusterDO().getMultiCreateSDKConfig());
-            current.setClusterDO(replacement);
+            current.setClusterDO((C) object);
         }
         return current;
     }
@@ -148,7 +145,7 @@ public class ColonyDO<C extends ClusterBaseDO> {
         ColonyDO<C> mainColony = this.allColonyDO.get(mainId);
 
         ColonyDO<C> colonyDO = this.allColonyDO.get(clusterId);
-        if (Objects.isNull(colonyDO) || Objects.isNull(mainColony)) {
+        if (Objects.isNull(colonyDO)) {
             log.error("clusterId to colonyDO is null, main is is {}, cluster id {}", mainId, clusterId);
             return;
         }
@@ -166,14 +163,7 @@ public class ColonyDO<C extends ClusterBaseDO> {
     public void unRelationship(Long mainId, Long clusterId) {
         ColonyDO<C> mainColony = this.allColonyDO.get(mainId);
         ColonyDO<C> colonyDO = this.allColonyDO.get(clusterId);
-        if (Objects.nonNull(mainColony)) {
-            mainColony.getRuntimeColonyDOMap().remove(clusterId);
-            mainColony.getStorageColonyDOMap().remove(clusterId);
-            mainColony.getMetaColonyDOList().remove(clusterId);
-        }
-        if (Objects.nonNull(colonyDO) && Objects.equals(colonyDO.getSuperiorId(), mainId)) {
-            colonyDO.setSuperiorId(null);
-        }
+        mainColony.remove(colonyDO.getClusterType(), clusterId);
     }
 
 
@@ -195,16 +185,7 @@ public class ColonyDO<C extends ClusterBaseDO> {
     }
 
     public ColonyDO<C> remove(Long clusterId) {
-        ColonyDO<C> removed = this.allColonyDO.remove(clusterId);
-        this.allColonyDO.forEach((id, colony) -> {
-            colony.getRuntimeColonyDOMap().remove(clusterId);
-            colony.getStorageColonyDOMap().remove(clusterId);
-            colony.getMetaColonyDOList().remove(clusterId);
-            if (Objects.equals(colony.getSuperiorId(), clusterId)) {
-                colony.setSuperiorId(null);
-            }
-        });
-        return removed;
+        return this.allColonyDO.remove(clusterId);
     }
 
     public void remove(ClusterType clusterType, Long clusterId) {

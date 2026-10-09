@@ -35,15 +35,15 @@ public class BodyDataDifference extends AbstractBufferDifference {
         }
         objectList.forEach((value) -> {
             String key = value.nodeUnique();
-            if (value.isDelete()) {
-                this.deleteData.add(value);
-                this.allData.remove(key);
-            } else if (value.isInsert()) {
+            if (value.isInsert()) {
                 this.insertData.add(value);
                 this.allData.put(key, value);
             } else if (value.isUpdate()) {
                 this.updateData.add(value);
                 this.allData.put(key, value);
+            } else if (value.isDelete()) {
+                this.deleteData.add(value);
+                this.allData.remove(key);
             }
         });
 

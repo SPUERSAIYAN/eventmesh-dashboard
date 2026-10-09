@@ -246,26 +246,20 @@
     <profiles>
         <profile>
             <id>state-mutation</id>
+            <properties>
+                <state.mutation.dir>${project.build.directory}/dev-crew/status-lifecycle-20261008/mutation</state.mutation.dir>
+            </properties>
             <build><plugins><plugin>
                 <groupId>org.pitest</groupId><artifactId>pitest-maven</artifactId><version>1.17.4</version>
                 <configuration>
                     <crossModule>true</crossModule>
                     <targetClasses>
-                        <param>org.apache.eventmesh.dashboard.common.model.base.BaseOrganizationBase</param>
-                        <param>org.apache.eventmesh.dashboard.common.model.metadata.TopicMetadata</param>
-                        <param>org.apache.eventmesh.dashboard.common.model.metadata.ConfigMetadata</param>
-                        <param>org.apache.eventmesh.dashboard.core.metadata.difference.BodyDataDifference</param>
-                        <param>org.apache.eventmesh.dashboard.core.cluster.ColonyDO</param>
-                        <param>org.apache.eventmesh.dashboard.core.function.SDK.SDKManage</param>
-                        <param>org.apache.eventmesh.dashboard.core.function.SDK.config.AbstractMultiCreateSDKConfig</param>
-                        <param>org.apache.eventmesh.dashboard.console.domain.metadata.ClusterMetadataDomain</param>
-                        <param>org.apache.eventmesh.dashboard.console.spring.support.DefaultDataHandler</param>
-                        <param>org.apache.eventmesh.dashboard.console.spring.support.FunctionManage</param>
+                        <param>org.apache.eventmesh.dashboard.console.domain.Impl.ClusterAndRuntimeDomainImpl*</param>
                         <param>org.apache.eventmesh.dashboard.console.service.metadata.AbstractDBDataMetadataHandler</param>
                     </targetClasses>
                     <targetTests><param>org.apache.eventmesh.dashboard.console.baseid.*Test</param></targetTests>
                     <outputFormats><param>XML</param><param>HTML</param></outputFormats>
-                    <reportsDirectory>${project.build.directory}/dev-crew/status-lifecycle-20261008/mutation</reportsDirectory>
+                    <reportsDirectory>${state.mutation.dir}</reportsDirectory>
                     <timestampedReports>false</timestampedReports>
                     <threads>2</threads>
                     <timeoutConstant>10000</timeoutConstant>

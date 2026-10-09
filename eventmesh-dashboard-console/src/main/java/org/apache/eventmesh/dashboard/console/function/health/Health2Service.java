@@ -145,10 +145,6 @@ public class Health2Service {
     @Deprecated
     public void unRegisterCluster(Long clusterId) {
         this.clusterHealthCheckServiceMap.remove(clusterId);
-        this.checkServiceMap.entrySet().removeIf(entry -> {
-            BaseSyncBase metadata = entry.getValue().getBaseSyncBase();
-            return Objects.equals(clusterId, metadata.isCluster() ? metadata.getId() : ((RuntimeMetadata) metadata).getClusterId());
-        });
     }
 
 
