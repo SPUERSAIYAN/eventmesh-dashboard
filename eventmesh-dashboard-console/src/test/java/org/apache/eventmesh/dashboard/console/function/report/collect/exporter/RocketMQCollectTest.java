@@ -446,6 +446,96 @@ public class RocketMQCollectTest {
         }
     }
 
+    /** 验证已进入解析的旧回调在关闭后不调用父类写入，也不发送子请求。 */
+    @Test
+    @DisplayName("解析中的回调在关闭后放弃写入和子请求")
+    public void processingCallbackChecksClosedBeforeWritingAndSending() throws Exception {
+        DefaultRemotingClient client = Mockito.mock(DefaultRemotingClient.class);
+        SDKManage sdk = Mockito.mock(SDKManage.class);
+        RuntimeMetadata runtime = runtime();
+        AtomicInteger writes = new AtomicInteger();
+        RocketMQCollect collector = new RocketMQCollect() {
+            @Override
+            protected void setData(org.apache.eventmesh.dashboard.console.function.report.model.base.OrganizationId data) {
+                writes.incrementAndGet();
+                super.setData(data);
+            }
+        };
+        var cluster = new org.apache.eventmesh.dashboard.common.model.metadata.ClusterMetadata();
+        cluster.setId(runtime.getClusterId());
+        cluster.setOrganizationId(7L);
+        cluster.setClusterType(runtime.getClusterType());
+        collector.setRuntimeMetadata(runtime);
+        collector.setClusterMetadata(cluster);
+        Mockito.when(sdk.getClient(SDKTypeEnum.ADMIN, runtime.getUnique())).thenReturn(client);
+        var calls = new java.util.concurrent.LinkedBlockingQueue<Call>();
+        AtomicInteger sends = new AtomicInteger();
+        var rootsSent = new java.util.concurrent.CountDownLatch(8);
+        Mockito.doAnswer(invocation -> {
+            sends.incrementAndGet();
+            rootsSent.countDown();
+            if (!failBrokerRoot(invocation.getArgument(0), invocation.getArgument(2))) {
+                calls.add(new Call(invocation.getArgument(0), invocation.getArgument(2)));
+            }
+            return null;
+        }).when(client).invokeAsync(Mockito.any(), Mockito.anyLong(), Mockito.any());
+        var wrapper = Mockito.mock(org.apache.eventmesh.dashboard.console.function.report.collect.DataSyncHandler.DataSyncHandlerWrapper.class);
+        var parsing = new java.util.concurrent.CountDownLatch(1);
+        var resume = new java.util.concurrent.CountDownLatch(1);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        Runnable collect = () -> {
+            try (var mocked = Mockito.mockStatic(SDKManage.class)) {
+                mocked.when(SDKManage::getInstance).thenReturn(sdk);
+                collector.collect(0, wrapper);
+            }
+        };
+        try {
+            var first = executor.submit(collect);
+            Call root = calls.poll(2, java.util.concurrent.TimeUnit.SECONDS);
+            Assertions.assertNotNull(root);
+            byte[] body = "{\"topicConfigTable\":{\"orders\":{}}}".getBytes(StandardCharsets.UTF_8);
+            RemotingCommand response = Mockito.mock(RemotingCommand.class);
+            Mockito.when(response.getCode()).thenReturn(ResponseCode.SUCCESS);
+            AtomicInteger reads = new AtomicInteger();
+            Mockito.when(response.getBody()).thenAnswer(invocation -> {
+                // 前两次读取属于公共校验，第三次读取已经进入 Topic 响应解析。
+                if (reads.incrementAndGet() == 3) {
+                    parsing.countDown();
+                    Assertions.assertTrue(resume.await(8, java.util.concurrent.TimeUnit.SECONDS));
+                }
+                return body;
+            });
+            ResponseFuture future = Mockito.mock(ResponseFuture.class);
+            Mockito.when(future.getResponseCommand()).thenReturn(response);
+            var oldCallback = executor.submit(() -> root.callback().operationComplete(future));
+            Assertions.assertTrue(parsing.await(2, java.util.concurrent.TimeUnit.SECONDS));
+            first.get(6, java.util.concurrent.TimeUnit.SECONDS);
+            var second = executor.submit(collect);
+            Call nextRoot = calls.poll(2, java.util.concurrent.TimeUnit.SECONDS);
+            Assertions.assertNotNull(nextRoot);
+            Assertions.assertTrue(rootsSent.await(2, java.util.concurrent.TimeUnit.SECONDS));
+            int sentBeforeResume = sends.get();
+            resume.countDown();
+            oldCallback.get(2, java.util.concurrent.TimeUnit.SECONDS);
+            Assertions.assertEquals(0, writes.get(), "Closed round must not invoke parent setData");
+            Assertions.assertEquals(sentBeforeResume, sends.get(), "Closed round must not send child requests");
+            var current = (org.apache.eventmesh.dashboard.console.function.report.collect.RestoreData)
+                org.apache.commons.lang3.reflect.FieldUtils.readField(collector, "current", true);
+            Assertions.assertTrue(current.getDataMap().isEmpty(), "Old samples must not enter the next round");
+            reply(nextRoot.callback(), ResponseCode.SUCCESS, "{\"topicConfigTable\":{}}".getBytes(StandardCharsets.UTF_8));
+            second.get(2, java.util.concurrent.TimeUnit.SECONDS);
+            var capture = org.mockito.ArgumentCaptor.forClass(org.apache.eventmesh.dashboard.console.function.report.collect.RestoreData.class);
+            Mockito.verify(wrapper, Mockito.times(2)).sync(capture.capture());
+            Assertions.assertTrue(capture.getAllValues().get(0).getDataMap().isEmpty());
+            Assertions.assertEquals(1, writes.get());
+            Assertions.assertEquals(0L, rows(capture.getAllValues().get(1).getDataMap(), RocketmqTopicNumber.class).get(0).getValue());
+            LoggerFactory.getLogger(RocketMQCollectTest.class).info("模拟回调验证通过：解析期间超时关闭，旧回调未调用父类写入或发送子请求，下一轮正常采集");
+        } finally {
+            resume.countDown();
+            executor.shutdownNow();
+        }
+    }
+
     /** 验证当前轮回调直接交付数据，上一轮迟到回调不会污染下一轮。 */
     @Test
     @DisplayName("直接交付并隔离前一轮回调")
