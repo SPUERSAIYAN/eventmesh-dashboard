@@ -89,6 +89,58 @@ import org.slf4j.LoggerFactory;
 
 
 public class RocketMQCollectTest {
+
+    /** 验证实际缓存容器接收并发样本，保留各模型的全部记录。 */
+    @Test
+    @DisplayName("线程安全缓存完整保存并发样本")
+    public void concurrentCacheWritesKeepAllSamples() throws Exception {
+        var cache = new org.apache.eventmesh.dashboard.console.function.report.collect.RestoreData();
+        int threadCount = 8;
+        int samplesPerThread = 5000;
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        try {
+            List<java.util.concurrent.Future<?>> jobs = new java.util.ArrayList<>();
+            for (int thread = 0; thread < threadCount; thread++) {
+                final int base = thread * samplesPerThread;
+                jobs.add(executor.submit(() -> {
+                    try {
+                        Assertions.assertTrue(start.await(2, java.util.concurrent.TimeUnit.SECONDS));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new AssertionError(e);
+                    }
+                    for (int sample = 0; sample < samplesPerThread; sample++) {
+                        long value = base + sample;
+                        cache.setData(value % 2 == 0 ? RocketMQCollectMapper.INSTANCE.topicNumber(value)
+                            : RocketMQCollectMapper.INSTANCE.groupNumber(value));
+                    }
+                }));
+            }
+            start.countDown();
+            for (var job : jobs) {
+                job.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+        int expected = threadCount * samplesPerThread;
+        Assertions.assertEquals(Set.of(RocketmqTopicNumber.class, RocketmqConsumerGroupNumber.class), cache.getDataMap().keySet());
+        Set<Long> values = new java.util.HashSet<>();
+        cache.getDataMap().forEach((model, samples) -> {
+            Assertions.assertEquals(expected / 2, samples.size(), model.getSimpleName());
+            for (Object sample : samples) {
+                RuntimeLongValue row = Assertions.assertInstanceOf(RuntimeLongValue.class, sample);
+                Assertions.assertEquals(model == RocketmqTopicNumber.class ? 0 : 1, row.getValue() % 2);
+                Assertions.assertTrue(values.add(row.getValue()), "Sample values must remain unique");
+            }
+        });
+        Assertions.assertEquals(expected, values.size());
+        LoggerFactory.getLogger(RocketMQCollectTest.class).info("实际缓存并发验证通过：线程数={}，样本数={}，全部样本完整且唯一",
+            threadCount, values.size());
+    }
+
     /** 验证消费位点、积压量和连接数正确映射到独立模型，并保留大整数精度。 */
     @Test
     @DisplayName("消费位点与连接数映射")
